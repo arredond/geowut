@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+	
+	<title>Webmap Tool</title>
+
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	
+	<link rel="shortcut icon" type="image/x-icon" href="docs/images/favicon.ico" />
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A==" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js" integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA==" crossorigin=""></script>
+	
+    <!-- Leaflet draw -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
+	<!-- Own stuff -->
+	<script src="copytoclipboard.js"></script>
+	<script src="utils.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body,
+        * {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            height: 100%;
+            width: 100%;
+            z-index: 0;
+        }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+<script type="module">
+// <script>
+	import * as mtc from 'https://cdn.skypack.dev/@mapbox/tile-cover';
+	import * as mtb from 'https://cdn.skypack.dev/@mapbox/tilebelt';
+	import * as h3 from 'https://cdn.skypack.dev/h3-js';
+	import * as Wkt from 'https://cdn.skypack.dev/wicket';
+
+	// import S2 from 'https://cdn.skypack.dev/s2-geometry';  THIS ONE WORKS BUT IS NOT VER USEFUL
+	// import * as s2 from 'https://cdn.skypack.dev/@radarlabs/s2'; THIS ONE DOESN'T WORK
+
+	// console.log(S2);
+	// window.S2 = S2;
+
+	
+    var wkt = new Wkt.Wkt();
+	let zoom = 8;
+	var map = L.map('map').setView([40, -3], zoom);
+
+	window.wkt = wkt;
+
+	// GRID LAYERS :D
+	let mapBoundCoords = getMapBoundCoords(map);
+	const h3ResMin = 2;
+	const qkResMin = 0;
+	const s2ResMin = 0;
+	let h3Res = -5;
+	let qkRes = 0;
+	let s2Res = -3;
+
+	function getZoomLevels(zoom) {
+		const zL = {
+			'h3': ((zoom + h3Res) >= h3ResMin) ? (zoom + h3Res) : h3ResMin,
+			's2': ((zoom + s2Res) >= s2ResMin) ? (zoom + s2Res) : s2ResMin,
+			'qk': ((zoom + qkRes) >= qkResMin) ? (zoom + qkRes) : qkResMin,
+		}
+
+		return zL
+	}
+	let zoomLevels = getZoomLevels(zoom);
+
+	// H3
+	function standardPopup(f, l) {
+		l.bindPopup('<pre>'+JSON.stringify(f.properties,null,' ').replace(/[\{\}"]/g,'')+'</pre>');
+	};
+	function h3Popup(f, l) {
+		standardPopup(f, l);
+		l.bindTooltip(f.properties['H3 cell ID'], {permanent: true, direction: 'center'})
+	};
+	let h3Layer = L.geoJSON(false, {color: 'red', onEachFeature: h3Popup});
+	let h3CoverIds = h3.polyfill(mapBoundCoords, zoomLevels['h3'])
+	function h3CellsToCoverLayer(cellsToAdd, coverLayer, cellsCache) {
+		return addCellsToCoverLayer(cellsToAdd, coverLayer, h3.h3ToGeoBoundary, cellsCache, 'H3 cell ID')
+	};
+	h3CellsToCoverLayer(h3CoverIds, h3Layer, [])
+
+	// S2 TO DO
+	// Having trouble importing radarlabs' s2 from CDN
+
+
+	// Quadkey
+	function qkPopup(f, l) {
+		standardPopup(f, l);
+		l.bindTooltip(f.properties['Quadkey'], {permanent: true, direction: 'center'})
+	};
+	let qkLayer = L.geoJSON(false, {color: 'green', onEachFeature: qkPopup});
+	let qkCoverIds = []
+	function qkSimpleCover(geojson, z) {
+		return mtc.geojson(geojson, {'min_zoom': z, 'max_zoom': z})
+	};
+	function qkSimpleIndexes(geojson, z) {
+		return mtc.indexes(geojson, {'min_zoom': z, 'max_zoom': z})
+	};
+	function qkSimpleTiles(geojson, z) {
+		return mtc.tiles(geojson, {'min_zoom': z, 'max_zoom': z})
+	};
+	function addQkCovering(mapBoundCoords, qkLayer) {
+		const mapBoundGeoJSON = L.polygon(mapBoundCoords).toGeoJSON().geometry
+		const indexes = qkSimpleIndexes(mapBoundGeoJSON, zoomLevels['qk'])
+		const geojsons = qkSimpleCover(mapBoundGeoJSON, zoomLevels['qk'])
+		const tiles = qkSimpleTiles(mapBoundGeoJSON, zoomLevels['qk'])
+		indexes.forEach((qkIndex, i) => {
+			if (qkCoverIds.includes(qkIndex)) {
+				return;
+			};
+			const feature = geojsons.features[i];
+			const tile = tiles[i];
+			const x = tile[0],
+					y = tile[1],
+					z = tile[2];
+			const y_tms = 2**zoom - y - 1;
+			const geojsonGeomString = JSON.stringify(feature.geometry);
+			const wktObj = wkt.read(geojsonGeomString);
+			window.wktObj = wktObj;
+			window.wktComponentsToBboxString = wktComponentsToBboxString;
+			feature.properties['Quadkey'] = qkIndex;
+			feature.properties['Tile (Google, z/x/y)'] = [z, x, y].join('/');
+			feature.properties['Tile (TMS, z/x/y)'] = [z, x, y_tms].join('/');
+			// feature.properties['Bounding box'] = wktComponentsToBboxString(wktObj.components);
+			// feature.properties['WKT'] = wktObj.write();
+			// feature.properties['GeoJSON'] = geojsonGeomString;
+			qkLayer.addData(feature);
+			qkCoverIds.push(qkIndex);
+		})
+	};
+	addQkCovering(mapBoundCoords, qkLayer);
+
+	let overlayMaps = {
+		'h3': h3Layer,
+		'qk': qkLayer
+	}
+	L.control.layers(undefined, overlayMaps).addTo(map);
+
+	const cartoBasemap = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {
+		maxZoom: 18,
+		attribution: '&copy;<a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy;<a href="https://carto.com/attribution">CARTO</a>'
+	}).addTo(map);
+
+
+	// // Custom layer control
+	// L.Control.Custom = L.Control.Layers.extend({
+	// 	onAdd: function () {
+	// 			this._initLayout();
+	// 			this._addButton();
+	// 			this._update();
+	// 			return this._container;
+	// 		},
+	// 	_addButton: function () {
+	// 		var elements = this._container.getElementsByClassName('leaflet-control-layers-list');
+	// 		var button = L.DomUtil.create('button', 'my-button-class', elements[0]);
+	// 		button.textContent = 'Close control';
+	// 		L.DomEvent.on(button, 'click', function(e){
+	// 			L.DomEvent.stop(e);
+	// 			this._collapse();
+	// 		}, this);
+	// 	}
+	// });
+
+	// var control = new L.Control.Custom(baseLayers).addTo(map);
+
+
+	// Add draw and edit toolbars
+	var drawnItems = new L.FeatureGroup();	
+	map.addLayer(drawnItems);
+	var drawControl = new L.Control.Draw({
+		draw: {
+			circle: false,
+			circlemarker: false
+		},
+		edit: {
+			featureGroup: drawnItems
+		}
+	});
+	map.addControl(drawControl);
+
+	// Add layer to toolbar once drawn
+	map.on('draw:created', function (e) {
+		let addedLayer = e.layer
+		const layerGeoJSON = addedLayer.toGeoJSON().geometry
+		const geojsonGeomString = JSON.stringify(layerGeoJSON)
+		const geomComponents = wkt.read(geojsonGeomString)
+		const geomWkt = geomComponents.write()
+		const qkCoverage = qkSimpleIndexes(layerGeoJSON, zoomLevels['qk'])
+		const h3Coverage = h3.polyfill(layerGeoJSON.coordinates, zoomLevels['h3'])
+		const bboxString = boundsToBboxString(e.layer.getBounds())
+		
+		// Consider maybe wrapping this in a function?
+		const geomItems = {
+			'GeoJSON': geojsonGeomString.replaceAll('"', '&quot;'),
+			'Well Known Text (WKT)': geomWkt,
+			'Bounding Box': bboxString,
+			'Coverage (Quadkeys)': qkCoverage,
+			'Coverage (H3)': h3Coverage,
+		}
+		const geomButtons = generateButtonsHtml(geomItems);
+		addedLayer.bindPopup(geomButtons)
+
+		drawnItems.addLayer(addedLayer);
+	});
+
+	map.on('draw:deleted', function (e) {
+		drawnItems.removeLayer(e.layer)
+	});
+
+	map.on('moveend', function (e) {
+		mapBoundCoords = getMapBoundCoords(map);
+
+		let newH3CoverIds = h3.polyfill(mapBoundCoords, zoomLevels['h3'])
+		h3CellsToCoverLayer(newH3CoverIds, h3Layer, h3CoverIds)
+
+		addQkCovering(mapBoundCoords, qkLayer)
+	});
+	map.on('zoomend', function (e) {
+		h3Layer.clearLayers();
+		h3CoverIds = [];
+
+		qkLayer.clearLayers();
+		qkCoverIds = [];
+
+		zoom = map.getZoom()
+		zoomLevels = getZoomLevels(zoom);
+	});
+
+
+
+</script>
+
+</body>
+</html>
