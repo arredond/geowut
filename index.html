@@ -1,20 +1,25 @@
 <!DOCTYPE html>
 <html>
 <head>
-	
+
 	<title>Webmap Tool</title>
 
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	
+
 	<link rel="shortcut icon" type="image/x-icon" href="docs/images/favicon.ico" />
 
+	<!-- Leaflet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A==" crossorigin=""/>
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js" integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA==" crossorigin=""></script>
-	
+
     <!-- Leaflet draw -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
+	<!-- Leaflet Easy Button, used for the add-data button: https://github.com/CliffCloud/Leaflet.EasyButton -->
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-easybutton@2/src/easy-button.css">
+	<script src="https://cdn.jsdelivr.net/npm/leaflet-easybutton@2/src/easy-button.js"></script>
 
 	<!-- Own stuff -->
 	<script src="copytoclipboard.js"></script>
@@ -37,37 +42,85 @@
             width: 100%;
             z-index: 0;
         }
+
+		.h3labelstyle {
+			font-weight: bold;
+			font-size: 15px;
+			color: red;
+		}
+
+		.qklabelstyle {
+			font-weight: bold;
+			font-size: 15px;
+			color: green;
+		}
+
+		.labelstyle {
+			fillColor: none;
+			fillOpacity: 0;
+			background-color: none;
+			border-color: none;
+			background: none;
+			border: none;
+			box-shadow: none;
+			margin: 0px;
+			cursor: none;
+			direction: 'center';
+			interactive: false;
+			fill: false;
+		}
+
+		.button-holder {
+			display: block;
+			justify-content: space-around;
+		}
+
+		.copy-button {
+			width: 100%;
+			height: 40px;
+			font-size: 15px;
+			margin: 3px;
+		}
+
+		.copy-button:hover{
+			background-color: #89e489;
+			transition: 0.5s;
+		}
+
+		.copy-button:active{
+			background-color: #89b0e4;
+			transition: 0.5s;
+		}
+
+		.addData{
+			font-size: 1.5em;
+		}
+
+		.leaflet-bar i, .leaflet-bar span { line-height:30px; }
     </style>
 </head>
 <body>
 
 <div id="map"></div>
 <script type="module">
-// <script>
 	import * as mtc from 'https://cdn.skypack.dev/@mapbox/tile-cover';
 	import * as mtb from 'https://cdn.skypack.dev/@mapbox/tilebelt';
 	import * as h3 from 'https://cdn.skypack.dev/h3-js';
 	import * as Wkt from 'https://cdn.skypack.dev/wicket';
 
-	// import S2 from 'https://cdn.skypack.dev/s2-geometry';  THIS ONE WORKS BUT IS NOT VER USEFUL
+	// import S2 from 'https://cdn.skypack.dev/s2-geometry';  THIS ONE WORKS BUT IS NOT VERY USEFUL OUT OF THE BOX
 	// import * as s2 from 'https://cdn.skypack.dev/@radarlabs/s2'; THIS ONE DOESN'T WORK
 
-	// console.log(S2);
-	// window.S2 = S2;
-
-	
     var wkt = new Wkt.Wkt();
 	let zoom = 8;
 	var map = L.map('map').setView([40, -3], zoom);
-
-	window.wkt = wkt;
 
 	// GRID LAYERS :D
 	let mapBoundCoords = getMapBoundCoords(map);
 	const h3ResMin = 2;
 	const qkResMin = 0;
 	const s2ResMin = 0;
-	let h3Res = -5;
+	let h3Res = -8;
 	let qkRes = 0;
 	let s2Res = -3;
 
@@ -84,11 +137,15 @@
 
 	// H3
 	function standardPopup(f, l) {
-		l.bindPopup('<pre>'+JSON.stringify(f.properties,null,' ').replace(/[\{\}"]/g,'')+'</pre>');
+		l.bindPopup(JSON.stringify(f.properties,null,' ').replace(/[\{\}"]/g,''));
 	};
 	function h3Popup(f, l) {
 		standardPopup(f, l);
-		l.bindTooltip(f.properties['H3 cell ID'], {permanent: true, direction: 'center'})
+		l.bindTooltip(f.properties['H3 cell ID'], {
+			permanent: true,
+			direction: 'center',
+			className: 'labelstyle h3labelstyle'
+		})
 	};
 	let h3Layer = L.geoJSON(false, {color: 'red', onEachFeature: h3Popup});
 	let h3CoverIds = h3.polyfill(mapBoundCoords, zoomLevels['h3'])
@@ -103,8 +160,12 @@
 
 	// Quadkey
 	function qkPopup(f, l) {
-		standardPopup(f, l);
-		l.bindTooltip(f.properties['Quadkey'], {permanent: true, direction: 'center'})
+		tablePopup(f, l);
+		l.bindTooltip(f.properties['Quadkey'], {
+			permanent: true,
+			direction: 'center',
+			className: 'labelstyle qklabelstyle'
+		})
 	};
 	let qkLayer = L.geoJSON(false, {color: 'green', onEachFeature: qkPopup});
 	let qkCoverIds = []
@@ -134,8 +195,6 @@
 			const y_tms = 2**zoom - y - 1;
 			const geojsonGeomString = JSON.stringify(feature.geometry);
 			const wktObj = wkt.read(geojsonGeomString);
-			window.wktObj = wktObj;
-			window.wktComponentsToBboxString = wktComponentsToBboxString;
 			feature.properties['Quadkey'] = qkIndex;
 			feature.properties['Tile (Google, z/x/y)'] = [z, x, y].join('/');
 			feature.properties['Tile (TMS, z/x/y)'] = [z, x, y_tms].join('/');
@@ -149,41 +208,18 @@
 	addQkCovering(mapBoundCoords, qkLayer);
 
 	let overlayMaps = {
-		'h3': h3Layer,
-		'qk': qkLayer
+		'<span class="h3labelstyle">h3 Cells</span>': h3Layer,
+		'<span class="qklabelstyle">Quadkeys</span>': qkLayer
 	}
-	L.control.layers(undefined, overlayMaps).addTo(map);
+	L.control.layers(undefined, overlayMaps, {collapsed: false}).addTo(map);
 
 	const cartoBasemap = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {
 		maxZoom: 18,
 		attribution: '&copy;<a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy;<a href="https://carto.com/attribution">CARTO</a>'
 	}).addTo(map);
 
-
-	// // Custom layer control
-	// L.Control.Custom = L.Control.Layers.extend({
-	// 	onAdd: function () {
-	// 			this._initLayout();
-	// 			this._addButton();
-	// 			this._update();
-	// 			return this._container;
-	// 		},
-	// 	_addButton: function () {
-	// 		var elements = this._container.getElementsByClassName('leaflet-control-layers-list');
-	// 		var button = L.DomUtil.create('button', 'my-button-class', elements[0]);
-	// 		button.textContent = 'Close control';
-	// 		L.DomEvent.on(button, 'click', function(e){
-	// 			L.DomEvent.stop(e);
-	// 			this._collapse();
-	// 		}, this);
-	// 	}
-	// });
-
-	// var control = new L.Control.Custom(baseLayers).addTo(map);
-
-
 	// Add draw and edit toolbars
-	var drawnItems = new L.FeatureGroup();	
+	var drawnItems = new L.FeatureGroup();
 	map.addLayer(drawnItems);
 	var drawControl = new L.Control.Draw({
 		draw: {
@@ -196,29 +232,39 @@
 	});
 	map.addControl(drawControl);
 
-	// Add layer to toolbar once drawn
-	map.on('draw:created', function (e) {
-		let addedLayer = e.layer
-		const layerGeoJSON = addedLayer.toGeoJSON().geometry
+	function addLayerPopups(layer, layerType) {
+		const layerGeoJSON = layer.toGeoJSON().geometry
 		const geojsonGeomString = JSON.stringify(layerGeoJSON)
 		const geomComponents = wkt.read(geojsonGeomString)
-		const geomWkt = geomComponents.write()
-		const qkCoverage = qkSimpleIndexes(layerGeoJSON, zoomLevels['qk'])
-		const h3Coverage = h3.polyfill(layerGeoJSON.coordinates, zoomLevels['h3'])
-		const bboxString = boundsToBboxString(e.layer.getBounds())
-		
+
 		// Consider maybe wrapping this in a function?
 		const geomItems = {
 			'GeoJSON': geojsonGeomString.replaceAll('"', '&quot;'),
-			'Well Known Text (WKT)': geomWkt,
-			'Bounding Box': bboxString,
-			'Coverage (Quadkeys)': qkCoverage,
-			'Coverage (H3)': h3Coverage,
+			'Well Known Text (WKT)': geomComponents.write(),
+			'Coverage (Quadkeys)': qkSimpleIndexes(layerGeoJSON, zoomLevels['qk']),
+			'Coverage (H3)': h3.polyfill(layerGeoJSON.coordinates, zoomLevels['h3']),
 		}
-		const geomButtons = generateButtonsHtml(geomItems);
-		addedLayer.bindPopup(geomButtons)
 
-		drawnItems.addLayer(addedLayer);
+		// Layer type dependend properties
+		if (layerType === 'marker') {
+			const markerLatLng = layer.getLatLng()
+			geomItems['Lat/Lng'] = `${markerLatLng.lng},${markerLatLng.lat}`
+			geomItems['Lng/Lat'] = `${markerLatLng.lng},${markerLatLng.lat}`
+		}
+		else {
+			const layerBounds = layer.getBounds()
+			const layerCenter = layerBounds.getCenter()
+			geomItems['Bounding Box'] =  boundsToBboxString(layerBounds)
+			geomItems['Center (lng/lat)'] = `${layerCenter.lng},${layerCenter.lat}`
+			geomItems['Center (lat/lng)'] = `${layerCenter.lat},${layerCenter.lng}`
+		}
+		const geomButtons = generateButtonsPopup(geomItems);
+		layer.bindPopup(geomButtons)
+	}
+	// Add layer to toolbar once drawn
+	map.on('draw:created', function (e) {
+		addLayerPopups(e.layer, e.layerType);
+		drawnItems.addLayer(e.layer);
 	});
 
 	map.on('draw:deleted', function (e) {
@@ -244,7 +290,25 @@
 		zoomLevels = getZoomLevels(zoom);
 	});
 
+	L.easyButton('<img src="./dist/upload_small.png">', function(){
+		const inputText = window.prompt('Paste your data here (WKT or GeoJSON, for now)');
+		try {
+			let inputWkt = new Wkt.Wkt();
+			inputWkt.read(inputText)
+			const inputLayers = L.geoJSON(inputWkt.toJson()).getLayers()
+			inputLayers.forEach(function(layer){
+				addLayerPopups(layer, 'marker');
+				drawnItems.addLayer(layer);
+			})
 
+			// Center map on newly added object
+			map.fitBounds(inputLayers[0].getBounds());
+		} catch (WKTError) {
+			console.log('Unable to parse data')
+		}
+
+
+	}).addTo(map);
 
 </script>
 

@@ -49,13 +49,37 @@ function addCellsToCoverLayer(cellsToAdd, coverLayer, cellToBoundaryFunc, cellsC
     });
 };
 
-function generateButtonsHtml(geomItems) {
+function generateButtonsPopup(geomItems) {
     let individualButtons = [];
     for (const [key, value] of Object.entries(geomItems)) {
-        const geomButton = `<button onclick="copyTextToClipboard('${value}')">${key}</button>`
+        const geomButton = `<button type="button" class="copy-button" onclick="copyTextToClipboard('${value}')">${key}</button>`
         individualButtons.push(geomButton)
     }
-    geomButtons = '<strong>Copy to clipboard</strong><br>' + individualButtons.join('<br>')
 
-    return geomButtons
+    const buttonsPopup = `<h2>Copy to clipboard</h2><div class="button-holder">${individualButtons.join('')}</div>`
+
+    return buttonsPopup
 }
+
+function tablePopup(f, l) {
+    let tableElements = []
+    for (const [key, value] of Object.entries(f.properties)) {
+        tableElements.push(`<tr><td><strong>${key}</strong></td><td>${value}</td></tr>`)
+    }
+    const table = `<table>
+        <tbody>
+        ${tableElements.join('')}
+        </tbody>
+    </table>
+    `
+    l.bindPopup(table);
+}
+
+// From https://stackoverflow.com/questions/18014907/leaflet-draw-retrieve-layer-type-on-drawedited-event
+ function getLayerType(layer) {
+    if (layer instanceof L.Circle) {return 'circle';}
+    if (layer instanceof L.Marker) {return 'marker';}
+    if ((layer instanceof L.Polyline) && ! (layer instanceof L.Polygon)) {return 'polyline';}
+    if ((layer instanceof L.Polygon) && ! (layer instanceof L.Rectangle)) {return 'polygon';}
+    if (layer instanceof L.Rectangle) {return 'rectangle';}
+};

@@ -24,13 +24,13 @@ to "no, better make it GeoJSON", all the way to "gimme a level 14 tile in Manhat
 ## How to use it
 
 For now, just draw a marker, line or polygon and click on it for a popup that allows you to copy a bunch of
-info to your clipboard (WKT, GeoJSON, BBox and quadkey and h3 cell coverings).
+info to your clipboard (WKT, GeoJSON, BBox and quadkey and h3 cell coverings). You can also add data in GeoJSON
+or WKT using the upload button. Simply paste your text!
 
-You can also look up h3 and quadkey cells manually by toggling the layers in the upper left corner.
+Finally, h3 and quadkey cells are also available by toggling the layers in the upper left corner.
 
 ## Coming soon
 
-- A text box to paste in and visualize almost anything, starting with WKT and GeoJSON.
 - Selectors to change the resolution of the grid layers.
 - Some design love to make it look less early 2000s.
 
