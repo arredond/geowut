@@ -297,7 +297,7 @@
 			inputWkt.read(inputText)
 			const inputLayers = L.geoJSON(inputWkt.toJson()).getLayers()
 			inputLayers.forEach(function(layer){
-				addLayerPopups(layer, 'marker');
+				addLayerPopups(layer, getLayerType(layer));
 				drawnItems.addLayer(layer);
 			})
 
