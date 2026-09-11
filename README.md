@@ -23,26 +23,38 @@ to "no, better make it GeoJSON", all the way to "gimme a level 14 tile in Manhat
 
 ## How to use it
 
-For now, just draw a marker, line or polygon and click on it for a popup that allows you to copy a bunch of
-info to your clipboard (WKT, GeoJSON, BBox and quadkey and h3 cell coverings). You can also add data in GeoJSON
-or WKT using the upload button. Simply paste your text!
+Draw a marker, line, polygon or rectangle and a panel opens with buttons to copy a bunch of info to your
+clipboard: WKT, GeoJSON, bounding box, center, and H3 / Quadkey / S2 cell coverings. You can also add data
+in GeoJSON or WKT via the "Add data" button. Simply paste your text!
 
-Finally, h3 and quadkey cells are also available by toggling the layers in the upper left corner.
+H3, Quadkey and S2 grid cells covering the current viewport are also available by toggling the layers in
+the bottom-left panel, where you can tweak each grid's resolution.
 
-## Coming soon
+## Stack
 
-- Selectors to change the resolution of the grid layers.
-- Some design love to make it look less early 2000s.
+Rewritten as a frontend-only static app: [Vite](https://vite.dev/) + TypeScript,
+[MapLibre GL JS](https://maplibre.org/) for the map, [Terra Draw](https://terradraw.io/) for drawing/editing
+geometries, [@terraformer/wkt](https://github.com/terraformer-js/terraformer) for WKT↔GeoJSON,
+[h3-js](https://github.com/uber/h3-js) for H3, and [s2js](https://github.com/missinglink/s2js) for S2. No
+backend, no database — `npm run build` produces a static `dist/` you can host anywhere.
+
+```
+npm install
+npm run dev      # local dev server
+npm run build    # production build to dist/
+npm run preview  # serve the production build locally
+```
 
 ## Massive props to
 
 The maintainers of all the aforementioned sites, plus:
 
-- [Leaflet](https://leafletjs.com/) for being the backbone of web mapping for the last 10 years.
+- [MapLibre](https://maplibre.org/) and the original [Leaflet](https://leafletjs.com/), which was the
+  backbone of web mapping (and of this project) for a very long time.
 - [CARTO](https://carto.com/) for their awesome basemaps.
-- Arthur Endsley K. for the [Wicket](https://github.com/arthur-e/Wicket) library and web tool.
+- [James Milner](https://github.com/JamesLMilner) for [Terra Draw](https://github.com/JamesLMilner/terra-draw)
+  and [Jin Igarashi](https://github.com/jinigarashi) for the [maplibre-gl-terradraw](https://github.com/watergis/maplibre-gl-terradraw) plugin.
+- The [Terraformer](https://github.com/terraformer-js/terraformer) maintainers for `@terraformer/wkt`.
 - [Uber](https://github.com/uber/h3-js) for the H3 geographic grid system and JS library.
-- [Mapbox](https://www.mapbox.com/) for so many tools, including
-  [tile-cover]([geojson.io](https://www.latlong.net/)),
-  [tilebelt]([geojson.io](https://www.latlong.net/)) and [geojson.io](https://www.latlong.net/),
-  among many other great FOSS contributions.
+- [missinglink](https://github.com/missinglink) for [s2js](https://github.com/missinglink/s2js), a pure
+  TypeScript port of Google's S2 geometry library.

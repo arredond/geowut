@@ -1,0 +1,243 @@
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --text: #1a1d21;
+  --text-muted: #5b6570;
+  --border: #dfe3e7;
+  --accent: #2e6dd9;
+  --accent-hover: #2559b3;
+  --panel-shadow: 0 4px 20px rgba(20, 24, 30, 0.12);
+  --radius: 10px;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+}
+
+/* Toolbar, top-right */
+.toolbar {
+  position: absolute;
+  top: 12px;
+  right: 60px;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+}
+
+.toolbar-button {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow);
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.toolbar-button:hover {
+  background: #f5f7fa;
+}
+
+/* Grid layer control, bottom-left */
+.grid-control {
+  position: absolute;
+  left: 12px;
+  bottom: 30px;
+  z-index: 5;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow);
+  padding: 10px 12px;
+  min-width: 220px;
+}
+
+.grid-control h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.grid-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.grid-row-label {
+  flex: 1;
+  font-size: 14px;
+  color: var(--grid-color, var(--text));
+  font-weight: 600;
+}
+
+.grid-row-resolution {
+  width: 3.5em;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+/* Feature side panel */
+.feature-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  width: min(360px, 100vw);
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--panel-shadow);
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.feature-panel h2 {
+  margin: 0 0 16px;
+  font-size: 16px;
+}
+
+.panel-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: none;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.button-holder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.copy-button {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 13px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #f9fafb;
+  cursor: pointer;
+  word-break: break-word;
+}
+
+.copy-button:hover {
+  background: #eef2f8;
+  border-color: var(--accent);
+}
+
+.copy-button:active {
+  background: #dfeaff;
+}
+
+/* Add data modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: rgba(20, 24, 30, 0.35);
+}
+
+.modal-overlay:not([hidden]) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: var(--bg);
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow);
+  padding: 24px;
+  width: min(480px, 90vw);
+}
+
+.modal h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.modal p {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.modal textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  resize: vertical;
+}
+
+.modal-error {
+  color: #c0392b !important;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.modal-actions button {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #f9fafb;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.modal-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.modal-actions button.primary:hover {
+  background: var(--accent-hover);
+}
+
+@media (max-width: 480px) {
+  .toolbar {
+    right: 12px;
+  }
+  .feature-panel {
+    width: 100vw;
+  }
+}
