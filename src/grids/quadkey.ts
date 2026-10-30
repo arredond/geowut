@@ -3,8 +3,9 @@ import type { Bbox, GridCellFeature } from './types';
 export const MIN_ZOOM = 0;
 export const MAX_ZOOM = 23;
 
+/** One above the map zoom gives classic 256px tiles, as MapLibre zoom levels are based on 512px ones. */
 export function resolutionForZoom(zoom: number): number {
-  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(zoom)));
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(zoom) + 1));
 }
 
 function lngToTileX(lng: number, z: number): number {
@@ -42,28 +43,38 @@ function tileBounds(x: number, y: number, z: number): Bbox {
   return [tileXToLng(x, z), tileYToLat(y + 1, z), tileXToLng(x + 1, z), tileYToLat(y, z)];
 }
 
-export function coverBbox(bbox: Bbox, zoom: number): GridCellFeature[] {
-  const [west, south, east, north] = bbox;
+function tileRange([west, south, east, north]: Bbox, zoom: number): [number, number, number, number] {
   const maxTileIndex = 2 ** zoom - 1;
   const xMin = Math.max(0, lngToTileX(west, zoom));
   const xMax = Math.min(maxTileIndex, lngToTileX(east, zoom));
   // Latitude decreases as tile Y increases, so north maps to the smaller Y.
   const yMin = Math.max(0, latToTileY(north, zoom));
   const yMax = Math.min(maxTileIndex, latToTileY(south, zoom));
+  return [xMin, xMax, yMin, yMax];
+}
+
+export function estimateCells(bbox: Bbox, zoom: number): number {
+  const [xMin, xMax, yMin, yMax] = tileRange(bbox, zoom);
+  return (xMax - xMin + 1) * (yMax - yMin + 1);
+}
+
+export function coverBbox(bbox: Bbox, zoom: number): GridCellFeature[] {
+  const [xMin, xMax, yMin, yMax] = tileRange(bbox, zoom);
 
   const features: GridCellFeature[] = [];
   for (let x = xMin; x <= xMax; x++) {
     for (let y = yMin; y <= yMax; y++) {
       const [w, s, e, n] = tileBounds(x, y, zoom);
       const quadkey = tileToQuadkey(x, y, zoom);
+      // TMS counts rows up from the south, Google/XYZ down from the north.
       const yTms = 2 ** zoom - y - 1;
       features.push({
         type: 'Feature',
         properties: {
           id: quadkey,
           label: quadkey,
-          'Tile (Google, z/x/y)': `${zoom}/${x}/${y}`,
-          'Tile (TMS, z/x/y)': `${zoom}/${x}/${yTms}`,
+          googleTile: `${zoom}/${x}/${y}`,
+          tmsTile: `${zoom}/${x}/${yTms}`,
         },
         geometry: {
           type: 'Polygon',

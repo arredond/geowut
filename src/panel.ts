@@ -1,7 +1,7 @@
 import { geojsonToWKT } from '@terraformer/wkt';
-import type { GeoJSONStoreFeatures } from 'terra-draw';
+import type { Geometry } from 'geojson';
 import { geometryBbox, geometryCenter, bboxToString } from './geometry';
-import { h3Coverage, quadkeyCoverage, s2Coverage } from './coverage';
+import { h3Coverage, quadkeyCoverage, s2Coverage, TooManyCellsError } from './coverage';
 import { copyText } from './clipboard';
 
 export interface Resolutions {
@@ -12,7 +12,8 @@ export interface Resolutions {
 
 interface CopyItem {
   label: string;
-  value: string;
+  /** Computed on click: serializing or covering a big geometry can take a while. */
+  value: () => string;
 }
 
 export class FeaturePanel {
@@ -27,31 +28,33 @@ export class FeaturePanel {
     container.appendChild(this.root);
   }
 
-  show(feature: GeoJSONStoreFeatures): void {
-    const geometry = feature.geometry;
+  show(geometry: Geometry, extraValues: { label: string; value: string }[] = []): void {
     const resolutions = this.getResolutions();
-    const geojsonString = JSON.stringify(geometry);
     const [centerLng, centerLat] = geometryCenter(geometry);
 
     const items: CopyItem[] = [
-      { label: 'GeoJSON', value: geojsonString },
-      { label: 'Well Known Text (WKT)', value: geojsonToWKT(geometry) },
-      { label: 'Bounding Box', value: bboxToString(geometryBbox(geometry)) },
-      { label: 'Center (lng/lat)', value: `${centerLng},${centerLat}` },
-      { label: 'Center (lat/lng)', value: `${centerLat},${centerLng}` },
+      ...extraValues.map(({ label, value }) => ({ label, value: () => value })),
+      { label: 'GeoJSON', value: () => JSON.stringify(geometry) },
+      { label: 'Well Known Text (WKT)', value: () => geojsonToWKT(geometry) },
+      { label: 'Bounding Box', value: () => bboxToString(geometryBbox(geometry)) },
+      { label: 'Center (lng/lat)', value: () => `${centerLng},${centerLat}` },
+      { label: 'Center (lat/lng)', value: () => `${centerLat},${centerLng}` },
     ];
 
     if (geometry.type === 'Point') {
-      items.push({ label: 'Lng/Lat', value: `${centerLng},${centerLat}` }, { label: 'Lat/Lng', value: `${centerLat},${centerLng}` });
+      items.push(
+        { label: 'Lng/Lat', value: () => `${centerLng},${centerLat}` },
+        { label: 'Lat/Lng', value: () => `${centerLat},${centerLng}` },
+      );
     }
 
     items.push(
-      { label: `H3 covering (res ${resolutions.h3})`, value: h3Coverage(geometry, resolutions.h3).join(',') },
+      { label: `H3 covering (res ${resolutions.h3})`, value: () => h3Coverage(geometry, resolutions.h3).join(',') },
       {
         label: `Quadkey covering (zoom ${resolutions.quadkey})`,
-        value: quadkeyCoverage(geometry, resolutions.quadkey).join(','),
+        value: () => quadkeyCoverage(geometry, resolutions.quadkey).join(','),
       },
-      { label: `S2 covering (level ${resolutions.s2})`, value: s2Coverage(geometry, resolutions.s2).join(',') },
+      { label: `S2 covering (level ${resolutions.s2})`, value: () => s2Coverage(geometry, resolutions.s2).join(',') },
     );
 
     this.render(items);
@@ -84,15 +87,21 @@ export class FeaturePanel {
       button.className = 'copy-button';
       button.textContent = item.label;
       button.addEventListener('click', async () => {
-        const ok = await copyText(item.value);
-        const original = button.textContent;
-        button.textContent = ok ? 'Copied!' : 'Failed to copy';
+        button.textContent = await copyItem(item);
         setTimeout(() => {
-          button.textContent = original;
+          button.textContent = item.label;
         }, 1200);
       });
       list.appendChild(button);
     }
     this.root.appendChild(list);
+  }
+}
+
+async function copyItem(item: CopyItem): Promise<string> {
+  try {
+    return (await copyText(item.value())) ? 'Copied!' : 'Failed to copy';
+  } catch (error) {
+    return error instanceof TooManyCellsError ? 'Too many cells: lower the resolution' : 'Failed to copy';
   }
 }

@@ -1,13 +1,16 @@
 import { s1, s2, geojson as s2geojson } from 's2js';
 import type { Polygon } from 'geojson';
+import { bboxAreaKm2 } from '../geometry';
 import type { Bbox, GridCellFeature } from './types';
 
 export const MIN_LEVEL = 1;
 export const MAX_LEVEL = 24;
 
-/** S2 cell level roughly matched to map zoom, clamped to a sane range. */
+const EARTH_SURFACE_KM2 = 510_000_000;
+
+/** Cell sides halve with each level, like tiles with each zoom; this keeps cells ~130px across. */
 export function resolutionForZoom(zoom: number): number {
-  return Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, Math.round(zoom - 1)));
+  return Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, Math.round(zoom)));
 }
 
 function bboxToPolygonGeometry(bbox: Bbox): Polygon {
@@ -35,6 +38,11 @@ function cellToPolygonRing(cellId: bigint): number[][] {
   }
   ring.push(ring[0]);
   return ring;
+}
+
+export function estimateCells(bbox: Bbox, level: number): number {
+  const cellAreaKm2 = EARTH_SURFACE_KM2 / (6 * 4 ** level);
+  return bboxAreaKm2(bbox) / cellAreaKm2;
 }
 
 export function coverBbox(bbox: Bbox, level: number): GridCellFeature[] {

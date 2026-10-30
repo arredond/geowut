@@ -1,13 +1,18 @@
 import { wktToGeoJSON } from '@terraformer/wkt';
-import type { Geometry } from 'geojson';
+import type { Feature, GeoJSON, Geometry } from 'geojson';
+
+export interface AddResult {
+  added: number;
+  rejected: number;
+}
 
 export class AddDataModal {
   private root: HTMLElement;
   private textarea: HTMLTextAreaElement;
   private error: HTMLElement;
-  private onSubmit: (geometry: Geometry) => void;
+  private onSubmit: (features: Feature[]) => AddResult;
 
-  constructor(container: HTMLElement, onSubmit: (geometry: Geometry) => void) {
+  constructor(container: HTMLElement, onSubmit: (features: Feature[]) => AddResult) {
     this.onSubmit = onSubmit;
 
     this.root = document.createElement('div');
@@ -25,7 +30,7 @@ export class AddDataModal {
     dialog.appendChild(heading);
 
     const hint = document.createElement('p');
-    hint.textContent = 'Paste WKT or GeoJSON geometry below.';
+    hint.textContent = 'Paste WKT or GeoJSON below.';
     dialog.appendChild(hint);
 
     this.textarea = document.createElement('textarea');
@@ -70,36 +75,53 @@ export class AddDataModal {
     this.root.hidden = true;
   }
 
+  private showError(message: string): void {
+    this.error.textContent = message;
+    this.error.hidden = false;
+  }
+
   private submit(): void {
     const text = this.textarea.value.trim();
     if (!text) return;
 
-    const geometry = parseGeometry(text);
-    if (!geometry) {
-      this.error.textContent = 'Could not parse that as WKT or GeoJSON.';
-      this.error.hidden = false;
-      return;
+    const features = parseFeatures(text);
+    const { added, rejected } = features.length > 0 ? this.onSubmit(features) : { added: 0, rejected: 0 };
+    if (added === 0) {
+      this.showError('Could not parse that as WKT or GeoJSON.');
+    } else if (rejected > 0) {
+      this.textarea.value = '';
+      this.showError(`Skipped ${rejected} of ${features.length} features with invalid geometry.`);
+    } else {
+      this.hide();
     }
-
-    this.onSubmit(geometry);
-    this.hide();
   }
 }
 
-function parseGeometry(text: string): Geometry | null {
+export function parseFeatures(text: string): Feature[] {
   try {
-    const parsed: unknown = JSON.parse(text);
-    if (parsed && typeof parsed === 'object' && 'type' in parsed) {
-      const geometry = (parsed as { type: string; geometry?: Geometry }).geometry ?? (parsed as Geometry);
-      if (geometry && 'type' in geometry) return geometry;
-    }
+    return geoJsonToFeatures(JSON.parse(text));
   } catch {
     // Not JSON, fall through to WKT.
   }
 
   try {
-    return wktToGeoJSON(text);
+    return [toFeature(wktToGeoJSON(text))];
   } catch {
-    return null;
+    return [];
   }
+}
+
+function geoJsonToFeatures(geojson: GeoJSON): Feature[] {
+  switch (geojson.type) {
+    case 'FeatureCollection':
+      return geojson.features.filter((feature) => feature.geometry);
+    case 'Feature':
+      return geojson.geometry ? [geojson] : [];
+    default:
+      return 'coordinates' in Object(geojson) || 'geometries' in Object(geojson) ? [toFeature(geojson)] : [];
+  }
+}
+
+function toFeature(geometry: Geometry): Feature {
+  return { type: 'Feature', geometry, properties: null };
 }

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   // maplibre-gl locates its worker script as a sibling file next to its own
@@ -10,5 +10,8 @@ export default defineConfig({
   },
   worker: {
     format: 'es',
+  },
+  test: {
+    environment: 'jsdom',
   },
 });

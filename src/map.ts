@@ -2,6 +2,7 @@ import { Map, NavigationControl, ScaleControl } from 'maplibre-gl';
 import type { Bbox } from './grids/types';
 
 const CARTO_VOYAGER_STYLE = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
+const MAX_MERCATOR_LAT = 85.05;
 
 export function createMap(container: string | HTMLElement): Map {
   const map = new Map({
@@ -31,5 +32,12 @@ export function getPaddedViewportBbox(map: Map, pad = 0.5): Bbox {
   const padX = (east - west) * pad;
   const padY = (north - south) * pad;
 
-  return [west - padX, south - padY, east + padX, north + padY];
+  // Zoomed far out the padding can exceed the world, which no grid can cover.
+  const worldWide = east - west + 2 * padX >= 360;
+  return [
+    worldWide ? -180 : west - padX,
+    Math.max(-MAX_MERCATOR_LAT, south - padY),
+    worldWide ? 180 : east + padX,
+    Math.min(MAX_MERCATOR_LAT, north + padY),
+  ];
 }

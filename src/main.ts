@@ -1,10 +1,12 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 import { createMap } from './map';
-import { GridLayer, GRID_DEFINITIONS } from './grids';
+import { GridLayer, GRID_DEFINITIONS, gridCellAtPoint, cellCopyValues } from './grids';
 import { GridControl } from './gridControl';
-import { setupDraw, addGeometryToDraw } from './draw';
+import { DrawController, featureGeometry, featureMeasurements, featureProperties } from './draw';
 import { FeaturePanel } from './panel';
+import { FeaturePopup } from './popup';
+import { Toolbar, historyShortcut, isTyping } from './toolbar';
 import { AddDataModal } from './addDataModal';
 import { geometryBbox } from './geometry';
 
@@ -21,15 +23,52 @@ const featurePanel = new FeaturePanel(app, () => ({
   s2: gridLayers.find((l) => l.def.id === 's2')!.resolution,
 }));
 
-const drawControl = setupDraw(map, {
-  onFeatureSelected: (feature) => featurePanel.show(feature),
-  onFeatureDeselected: () => featurePanel.hide(),
-  onFeatureDeleted: () => featurePanel.hide(),
+const featurePopup = new FeaturePopup(map);
+
+const draw = new DrawController(map, {
+  onStateChange: (state) => {
+    toolbar.setState(state);
+    app.classList.toggle('deleting', state === 'delete');
+    if (state !== 'select') featurePopup.hide();
+  },
+  onHistoryChange: (canUndo, canRedo) => toolbar.setHistory(canUndo, canRedo),
+  onFeatureChanged: (feature) => featurePanel.show(featureGeometry(feature)),
+  onFeaturesRemoved: () => {
+    featurePanel.hide();
+    featurePopup.hide();
+  },
+  onMapClicked: (feature, event) => {
+    const hit = gridCellAtPoint(map, gridLayers, event.point);
+    if (hit) {
+      featurePanel.show(hit.cell.geometry, cellCopyValues(hit));
+    } else if (feature) {
+      const id = feature.id!;
+      featurePanel.show(featureGeometry(feature));
+      featurePopup.show({ ...featureMeasurements(feature), ...featureProperties(feature) }, event.lngLat, {
+        onEdit: () => draw.edit(id),
+        onDelete: () => draw.delete(id),
+      });
+    } else {
+      featurePanel.hide();
+    }
+  },
 });
 
-const addDataModal = new AddDataModal(app, (geometry) => {
-  addGeometryToDraw(drawControl, geometry);
-  const [west, south, east, north] = geometryBbox(geometry);
+const toolbar = new Toolbar(app, {
+  setState: (state) => draw.setState(state),
+  deleteAll: () => draw.deleteAll(),
+  undo: () => draw.undo(),
+  redo: () => draw.redo(),
+});
+
+const addDataModal = new AddDataModal(app, (features) => {
+  const { added, rejected } = draw.addFeatures(features);
+  if (added.length === 0) return { added: 0, rejected };
+
+  const [west, south, east, north] = geometryBbox({
+    type: 'GeometryCollection',
+    geometries: added.map((feature) => feature.geometry),
+  });
   map.fitBounds(
     [
       [west, south],
@@ -37,6 +76,20 @@ const addDataModal = new AddDataModal(app, (geometry) => {
     ],
     { padding: 60, maxZoom: 16 },
   );
+  return { added: added.length, rejected };
+});
+
+document.addEventListener('keydown', (e) => {
+  const history = historyShortcut(e);
+  if (history) {
+    e.preventDefault();
+    draw[history]();
+  } else if (e.key === 'Escape') {
+    draw.setState('select');
+    featurePopup.hide();
+  } else if (e.key === 'Backspace' && !isTyping(e)) {
+    featurePopup.deleteFeature();
+  }
 });
 
 map.on('load', () => {
