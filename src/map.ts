@@ -1,5 +1,9 @@
-import { Map, NavigationControl, ScaleControl } from 'maplibre-gl';
+import { Map, NavigationControl, ScaleControl, setWorkerUrl } from 'maplibre-gl';
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import type { Bbox } from './grids/types';
+
+// MapLibre expects its worker next to its own module, which doesn't survive bundling.
+setWorkerUrl(maplibreWorkerUrl);
 
 const CARTO_VOYAGER_STYLE = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
 const MAX_MERCATOR_LAT = 85.05;
