@@ -9,12 +9,13 @@ describe('Toolbar', () => {
   let actions: { [K in keyof ToolbarActions]: ReturnType<typeof vi.fn> };
   let toolbar: Toolbar;
   const button = (title: string) => document.querySelector<HTMLButtonElement>(`[title="${title}"]`)!;
-  const chips = () => document.querySelector<HTMLElement>('.draw-chips')!;
+  const chips = () => button('Stop deleting').parentElement!;
+  const measureChips = (tool: string) => button(tool).nextElementSibling as HTMLElement;
 
   beforeEach(() => {
     document.body.replaceChildren();
     actions = { setState: vi.fn(), deleteAll: vi.fn(), undo: vi.fn(), redo: vi.fn() };
-    toolbar = new Toolbar(document.body, actions as unknown as ToolbarActions);
+    toolbar = new Toolbar(document.body, actions as unknown as ToolbarActions, 'metric');
   });
 
   it('offers every drawing tool and no select tool', () => {
@@ -26,6 +27,8 @@ describe('Toolbar', () => {
       'Draw a rectangle',
       'Draw a circle',
       'Draw freehand',
+      'Measure distance',
+      'Measure area',
       'Delete features',
       'Undo',
       'Redo',
@@ -76,6 +79,43 @@ describe('Toolbar', () => {
     it('goes back to select with the x chip', () => {
       toolbar.setState('delete');
       button('Stop deleting').click();
+      expect(actions.setState).toHaveBeenCalledWith('select');
+    });
+  });
+
+  describe('measuring', () => {
+    it('picks a measure tool', () => {
+      button('Measure area').click();
+      expect(actions.setState).toHaveBeenCalledWith('measure-area');
+    });
+
+    it('shows the readout only next to the active measure tool', () => {
+      toolbar.setState('measure-line');
+      expect(measureChips('Measure distance').hidden).toBe(false);
+      expect(measureChips('Measure area').hidden).toBe(true);
+      toolbar.setState('select');
+      expect(measureChips('Measure distance').hidden).toBe(true);
+    });
+
+    it('hints how to start, then shows the measurement', () => {
+      toolbar.setState('measure-line');
+      toolbar.setMeasurement(null);
+      const readout = measureChips('Measure distance').querySelector('.draw-readout')!;
+      expect(readout.textContent).toBe('Click to start a line');
+      toolbar.setMeasurement({ lengthKm: 12.345 });
+      expect(readout.textContent).toBe('12.3 km');
+    });
+
+    it('shows the measurement again in new units', () => {
+      toolbar.setState('measure-line');
+      toolbar.setMeasurement({ lengthKm: 16.09344 });
+      toolbar.setUnits('imperial');
+      expect(measureChips('Measure distance').querySelector('.draw-readout')!.textContent).toBe('10 mi');
+    });
+
+    it('goes back to select with the x chip', () => {
+      toolbar.setState('measure-area');
+      measureChips('Measure area').querySelector<HTMLElement>('[title="Stop measuring"]')!.click();
       expect(actions.setState).toHaveBeenCalledWith('select');
     });
   });

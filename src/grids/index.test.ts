@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import { cellCopyValues, gridCellAtPoint, GridLayer, GRID_DEFINITIONS } from '.';
+import { cellDetails, gridCellAtPoint, GridLayer, GRID_DEFINITIONS } from '.';
 import type { GridCellFeature } from '.';
 import { coverBbox } from './quadkey';
 
@@ -59,6 +59,20 @@ describe('GridLayer', () => {
 
     expect(onChange).toHaveBeenCalledWith(15);
     expect(map.setData).not.toHaveBeenCalled();
+  });
+
+  it('tells listeners when the resolution changes, and only then', () => {
+    const listener = vi.fn();
+    layer.addResolutionListener(listener);
+    layer.resetResolutionForZoom();
+    expect(listener).not.toHaveBeenCalled();
+    map.zoom = 14;
+    layer.resetResolutionForZoom();
+    expect(listener).toHaveBeenCalledOnce();
+    layer.setAuto(false);
+    layer.setResolution(9);
+    layer.setResolution(9);
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 
   it('keeps a manual resolution while zooming', () => {
@@ -159,22 +173,35 @@ describe('gridCellAtPoint', () => {
   });
 });
 
-describe('cellCopyValues', () => {
+describe('cellDetails', () => {
   const map = fakeMap();
 
-  it('offers the name of H3 and S2 cells', () => {
-    const layer = new GridLayer(asMap(map), definition('h3'));
-    const cell: GridCellFeature = { type: 'Feature', properties: { id: 'abc', label: 'abc' }, geometry: { type: 'Polygon', coordinates: [] } };
-    expect(cellCopyValues({ layer, cell })).toEqual([{ label: 'H3 cell', value: 'abc' }]);
+  it('gives the ID, level and size of the cell clicked', () => {
+    const layer = new GridLayer(asMap(map), definition('quadkey'));
+    layer.setResolution(12);
+    const [cell] = coverBbox([-3.7, 40.4, -3.7, 40.4], 12);
+    const rows = cellDetails({ layer, cell })('metric');
+    expect(rows.map((row) => row.label)).toEqual(['ID', 'Zoom', 'Google tile (Z/X/Y)', 'TMS tile (Z/X/Y)', 'Area', 'Edge length (avg)']);
+    expect(rows[0].value).toBe(cell.properties.id);
+    expect(rows[1].value).toBe('12');
+    expect(rows[2].value).toBe('12/2005/1544');
+    expect(rows[3].value).toBe('12/2005/2551');
+    expect(rows[4].value).toMatch(/ km²$/);
   });
 
-  it('adds Google and TMS identifiers for quadkeys', () => {
+  it('has no tile names for H3 and S2 cells', () => {
+    const layer = new GridLayer(asMap(map), definition('h3'));
+    const cell: GridCellFeature = { type: 'Feature', properties: { id: '8928308280fffff', label: '' }, geometry: { type: 'Polygon', coordinates: [] } };
+    expect(cellDetails({ layer, cell })('metric').map((row) => row.label)).toEqual(['ID', 'Resolution', 'Area', 'Edge length (avg)']);
+  });
+
+  it('keeps the level of the click, as the layer\'s moves on with the zoom', () => {
     const layer = new GridLayer(asMap(map), definition('quadkey'));
+    layer.setResolution(12);
     const [cell] = coverBbox([-3.7, 40.4, -3.7, 40.4], 12);
-    expect(cellCopyValues({ layer, cell })).toEqual([
-      { label: 'Quadkey', value: cell.properties.id },
-      { label: 'Google tile (Z/X/Y)', value: '12/2005/1544' },
-      { label: 'TMS tile (Z/X/Y)', value: '12/2005/2551' },
-    ]);
+    const details = cellDetails({ layer, cell });
+    layer.setResolution(14);
+    expect(details('imperial')[1].value).toBe('12');
+    expect(details('imperial')[5].value).toMatch(/ mi$/);
   });
 });

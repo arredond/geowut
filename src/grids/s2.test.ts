@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { s2 } from 's2js';
-import { coverBbox, estimateCells, MAX_LEVEL, MIN_LEVEL, resolutionForZoom } from './s2';
+import { cellPolygon, cellStats, coverBbox, estimateCells, levelStats, MAX_LEVEL, MIN_LEVEL, resolutionForZoom } from './s2';
 import type { Bbox } from './types';
 
 const BBOX: Bbox = [-4, 40, -3, 41];
@@ -42,5 +42,29 @@ describe('resolutionForZoom', () => {
   it('stays in range', () => {
     expect(resolutionForZoom(0)).toBe(MIN_LEVEL);
     expect(resolutionForZoom(40)).toBe(MAX_LEVEL);
+  });
+});
+
+describe('cell sizes', () => {
+  it('gives S2\'s published averages per level', () => {
+    // The S2 cell statistics table: level 12 cells span 3.31 to 6.38 km², 5.07 on average.
+    expect(levelStats(12).areaKm2).toBeCloseTo(5.07, 2);
+    expect(levelStats(12).edgeKm).toBeCloseTo(2.27, 2);
+  });
+
+  it('measures a cell within the spread of its level', () => {
+    const [cell] = coverBbox([-3.001, 40, -3, 40.001], 12);
+    const { areaKm2, edgeKm } = cellStats(cell.properties.id);
+    expect(areaKm2 / levelStats(12).areaKm2).toBeGreaterThan(0.6);
+    expect(areaKm2 / levelStats(12).areaKm2).toBeLessThan(1.4);
+    expect(edgeKm / levelStats(12).edgeKm).toBeGreaterThan(0.6);
+    expect(edgeKm / levelStats(12).edgeKm).toBeLessThan(1.4);
+  });
+});
+
+describe('cellPolygon', () => {
+  it('outlines the cell as the grid layer draws it', () => {
+    const [cell] = coverBbox([-3.7, 40.4, -3.699, 40.401], 12);
+    expect(cellPolygon(cell.properties.id)).toEqual(cell.geometry);
   });
 });

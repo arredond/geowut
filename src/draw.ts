@@ -15,6 +15,9 @@ import type { Map as MapLibreMap, MapMouseEvent } from 'maplibre-gl';
 import type { GeoJSONStoreFeatures, GeoJSONStoreGeometries } from 'terra-draw';
 import type { Feature, GeoJsonProperties, Geometry, Polygon, Position } from 'geojson';
 import { circleCenter, measureGeometry } from './geometry';
+import { Measurer, MEASURE_TOOLS } from './measure';
+import type { Measurement, MeasureTool } from './measure';
+import type { Units } from './units';
 
 type JSONObject = NonNullable<GeoJSONStoreFeatures['properties'][string]>;
 type FeatureId = GeoJSONStoreFeatures['id'] & {};
@@ -23,7 +26,9 @@ export const TOOLS = ['point', 'linestring', 'polygon', 'rectangle', 'circle', '
 export type Tool = (typeof TOOLS)[number];
 
 /** 'select' is the resting state: clicks pick features. Everything else returns to it, on Esc at the latest. */
-export type DrawState = 'select' | 'edit' | 'delete' | Tool;
+export type DrawState = 'select' | 'edit' | 'delete' | Tool | MeasureTool;
+
+const isMeasureTool = (state: DrawState): state is MeasureTool => MEASURE_TOOLS.includes(state as MeasureTool);
 
 export interface DrawCallbacks {
   onStateChange: (state: DrawState) => void;
@@ -33,6 +38,8 @@ export interface DrawCallbacks {
   onFeaturesRemoved: () => void;
   /** Fired for clicks in 'select' state, with the feature under the pointer if any. */
   onMapClicked: (feature: GeoJSONStoreFeatures | undefined, event: MapMouseEvent) => void;
+  /** The current measurement while a measure tool is on, null when there is nothing measured yet. */
+  onMeasurementChange: (measurement: Measurement | null) => void;
 }
 
 /** Terra Draw's mode for 'select' state: it renders features but leaves clicks to us. */
@@ -55,6 +62,7 @@ const EDIT_FLAGS = {
 export class DrawController {
   state: DrawState = 'select';
   private terraDraw: TerraDraw;
+  private measurer: Measurer;
   private callbacks: DrawCallbacks;
   private editedId?: FeatureId;
   private finishingClick = false;
@@ -93,13 +101,18 @@ export class DrawController {
       this.callbacks.onHistoryChange(this.terraDraw.canUndo(), this.terraDraw.canRedo());
     });
     map.on('click', (e) => this.onClick(e));
+    this.measurer = new Measurer(map, (measurement) => this.callbacks.onMeasurementChange(measurement));
   }
 
   setState(state: DrawState): void {
     if (!this.terraDraw.enabled || state === this.state) return;
+    const wasMeasuring = isMeasureTool(this.state);
     this.state = state;
     this.editedId = undefined;
-    this.terraDraw.setMode(state === 'select' || state === 'delete' ? IDLE_MODE : state === 'edit' ? EDIT_MODE : state);
+    const passive = state === 'select' || state === 'delete' || isMeasureTool(state);
+    this.terraDraw.setMode(passive ? IDLE_MODE : state === 'edit' ? EDIT_MODE : state);
+    if (isMeasureTool(state)) this.measurer.start(state);
+    else if (wasMeasuring) this.measurer.stop();
     this.callbacks.onStateChange(state);
   }
 
@@ -173,7 +186,7 @@ export class DrawController {
   }
 
   private onClick(e: MapMouseEvent): void {
-    if (this.finishingClick || TOOLS.includes(this.state as Tool)) return;
+    if (this.finishingClick || TOOLS.includes(this.state as Tool) || isMeasureTool(this.state)) return;
 
     if (this.state === 'edit') {
       const under = this.terraDraw.getFeaturesAtLngLat(e.lngLat, { ignoreSelectFeatures: false, ignoreCoordinatePoints: true });
@@ -256,12 +269,18 @@ export function featureGeometry(feature: GeoJSONStoreFeatures): Geometry {
 }
 
 /** Computed on demand, as features can be edited. Parts of a mixed pasted geometry report for themselves. */
-export function featureMeasurements(feature: GeoJSONStoreFeatures): Record<string, number> {
-  const measurements = measureGeometry(featureGeometry(feature)) ?? measureGeometry(feature.geometry)!;
+export function featureMeasurements(feature: GeoJSONStoreFeatures, units: Units = 'metric'): Record<string, number> {
+  const measurements = measureGeometry(featureGeometry(feature), units) ?? measureGeometry(feature.geometry, units)!;
   if (feature.properties.mode !== 'circle') return measurements;
   return { ...measurements, ...circleCenter((feature.geometry as Polygon).coordinates[0]) };
 }
 
 export function featureProperties(feature: GeoJSONStoreFeatures): GeoJsonProperties {
   return (feature.properties.sourceProperties as GeoJsonProperties | undefined) ?? null;
+}
+
+/** Measurements, then whatever properties the feature was pasted with. */
+export function featureDetails(feature: GeoJSONStoreFeatures, units: Units): { label: string; value: string }[] {
+  const entries = Object.entries({ ...featureMeasurements(feature, units), ...featureProperties(feature) });
+  return entries.map(([label, value]) => ({ label, value: typeof value === 'object' ? JSON.stringify(value) : String(value) }));
 }

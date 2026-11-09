@@ -1,6 +1,7 @@
 import * as h3 from 'h3-js';
 import { bboxAreaKm2 } from '../geometry';
-import type { Bbox, GridCellFeature } from './types';
+import type { Polygon, Position } from 'geojson';
+import type { Bbox, CellStats, GridCellFeature } from './types';
 
 export const MIN_RESOLUTION = 0;
 export const MAX_RESOLUTION = 15;
@@ -23,6 +24,27 @@ function lngSlices(west: number, east: number): [number, number][] {
     start = end;
   }
   return slices;
+}
+
+/** H3's published average for the resolution, over all its cells. */
+export function levelStats(resolution: number): CellStats {
+  return {
+    areaKm2: h3.getHexagonAreaAvg(resolution, h3.UNITS.km2),
+    edgeKm: h3.getHexagonEdgeLengthAvg(resolution, h3.UNITS.km),
+  };
+}
+
+/** From H3's own edges rather than the boundary, which gains extra vertices where cells cross icosahedron faces. */
+export function cellStats(cell: string): CellStats {
+  const edges = h3.originToDirectedEdges(cell).map((edge) => h3.edgeLength(edge, h3.UNITS.km));
+  return {
+    areaKm2: h3.cellArea(cell, h3.UNITS.km2),
+    edgeKm: edges.reduce((sum, length) => sum + length, 0) / edges.length,
+  };
+}
+
+export function cellPolygon(cell: string): Polygon {
+  return { type: 'Polygon', coordinates: [unwrapRing(h3.cellToBoundary(cell, true))] };
 }
 
 export function estimateCells(bbox: Bbox, resolution: number): number {
@@ -59,4 +81,38 @@ export function coverBbox(bbox: Bbox, resolution: number): GridCellFeature[] {
 function unwrapRing(ring: number[][]): number[][] {
   const crossesAntimeridian = ring.some(([lng]) => Math.abs(lng - ring[0][0]) > 180);
   return crossesAntimeridian ? ring.map(([lng, lat]) => [lng < 0 ? lng + 360 : lng, lat]) : ring;
+}
+
+/** Steps along a line this many to a cell edge: short enough not to skip a cell the line only clips. */
+const LINE_STEPS_PER_EDGE = 10;
+
+const mercatorY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+const mercatorLat = (y: number) => (360 / Math.PI) * Math.atan(Math.exp(y)) - 90;
+
+/** The cells a line passes through, found by stepping along it as it's drawn on the map: straight in Web Mercator. */
+export function lineCells(line: Position[], resolution: number): string[] {
+  const step = h3.getHexagonEdgeLengthAvg(resolution, h3.UNITS.km) / LINE_STEPS_PER_EDGE;
+  const cells = new Set<string>();
+  line.forEach(([lng, lat], i) => {
+    cells.add(h3.latLngToCell(lat, lng, resolution));
+    if (i === 0) return;
+    const [prevLng, prevLat] = line[i - 1];
+    const steps = Math.ceil(h3.greatCircleDistance([prevLat, prevLng], [lat, lng], h3.UNITS.km) / step);
+    const [y0, y1] = [mercatorY(prevLat), mercatorY(lat)];
+    for (let s = 1; s < steps; s++) {
+      const t = s / steps;
+      cells.add(h3.latLngToCell(mercatorLat(y0 + (y1 - y0) * t), prevLng + (lng - prevLng) * t, resolution));
+    }
+  });
+  return [...cells];
+}
+
+/** Roughly how many cells a line passes through, without stepping along it. */
+export function estimateLineCells(line: Position[], resolution: number): number {
+  const edge = h3.getHexagonEdgeLengthAvg(resolution, h3.UNITS.km);
+  return line.reduce((total, [lng, lat], i) => {
+    if (i === 0) return 1;
+    const [prevLng, prevLat] = line[i - 1];
+    return total + h3.greatCircleDistance([prevLat, prevLng], [lat, lng], h3.UNITS.km) / edge;
+  }, 0);
 }

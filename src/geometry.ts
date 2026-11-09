@@ -1,6 +1,8 @@
 import { Geodesic } from 'geographiclib-geodesic';
 import type { Geometry, Position } from 'geojson';
 import type { Bbox } from './grids/types';
+import { LENGTH_UNIT } from './units';
+import type { Units } from './units';
 
 const EARTH_RADIUS_KM = 6371;
 
@@ -69,35 +71,43 @@ function tracePath(positions: Position[], closed: boolean): { lengthKm: number; 
   return { lengthKm: perimeter / 1000, areaKm2: Math.abs(area ?? 0) / 1e6 };
 }
 
-function lengthKm(line: Position[]): number {
+export function lengthKm(line: Position[]): number {
   return tracePath(line, false).lengthKm;
 }
 
-function polygonsMeasurements(polygons: Position[][][]): Record<string, number> {
+/** Area and perimeter of a closed ring, in km² and km. */
+export function ringMeasurements(ring: Position[]): { areaKm2: number; perimeterKm: number } {
+  const { lengthKm: perimeterKm, areaKm2 } = tracePath(ring, true);
+  return { areaKm2, perimeterKm };
+}
+
+function polygonsMeasurements(polygons: Position[][][], units: Units): Record<string, number> {
+  const { label, perKm } = LENGTH_UNIT[units];
   const rings = polygons.flat();
   const area = polygons.reduce((total, [outer, ...holes]) => {
     const holesArea = holes.reduce((sum, hole) => sum + tracePath(hole, true).areaKm2, 0);
     return total + tracePath(outer, true).areaKm2 - holesArea;
   }, 0);
   return {
-    'Perimeter (km)': roundSize(rings.reduce((total, ring) => total + tracePath(ring, true).lengthKm, 0)),
-    'Area (km2)': roundSize(area),
+    [`Perimeter (${label})`]: roundSize(rings.reduce((total, ring) => total + tracePath(ring, true).lengthKm, 0) * perKm),
+    [`Area (${label}2)`]: roundSize(area * perKm ** 2),
   };
 }
 
 /** What every feature shows at the very least, or null for geometries with no single answer. */
-export function measureGeometry(geometry: Geometry): Record<string, number> | null {
+export function measureGeometry(geometry: Geometry, units: Units = 'metric'): Record<string, number> | null {
+  const { label, perKm } = LENGTH_UNIT[units];
   switch (geometry.type) {
     case 'Point':
       return { Latitude: roundCoordinate(geometry.coordinates[1]), Longitude: roundCoordinate(geometry.coordinates[0]) };
     case 'LineString':
-      return { 'Length (km)': roundSize(lengthKm(geometry.coordinates)) };
+      return { [`Length (${label})`]: roundSize(lengthKm(geometry.coordinates) * perKm) };
     case 'MultiLineString':
-      return { 'Length (km)': roundSize(geometry.coordinates.reduce((total, line) => total + lengthKm(line), 0)) };
+      return { [`Length (${label})`]: roundSize(geometry.coordinates.reduce((total, line) => total + lengthKm(line), 0) * perKm) };
     case 'Polygon':
-      return polygonsMeasurements([geometry.coordinates]);
+      return polygonsMeasurements([geometry.coordinates], units);
     case 'MultiPolygon':
-      return polygonsMeasurements(geometry.coordinates);
+      return polygonsMeasurements(geometry.coordinates, units);
     default:
       return null;
   }

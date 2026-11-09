@@ -7,6 +7,13 @@
   --accent: #2e6dd9;
   --accent-hover: #2559b3;
   --panel-shadow: 0 4px 20px rgba(20, 24, 30, 0.12);
+  --surface: #f9fafb;
+  --hover: #eef2f8;
+  --pressed: #dfeaff;
+  --disabled-bg: #f3f4f6;
+  --danger: #d92d20;
+  --danger-bg: #fdecea;
+  --overlay: rgba(20, 24, 30, 0.35);
   --radius: 10px;
   font-family:
     system-ui,
@@ -14,6 +21,50 @@
     'Segoe UI',
     Roboto,
     sans-serif;
+}
+
+/* Dark: chosen outright, or by the system when the theme is auto */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #1d2127;
+  --text: #e6e9ed;
+  --text-muted: #9aa4af;
+  --border: #353b44;
+  --accent: #4f8ef7;
+  --accent-hover: #6aa0f8;
+  --panel-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  --surface: #252a31;
+  --hover: #2c333c;
+  --pressed: #22385c;
+  --disabled-bg: #252a31;
+  --danger: #f97066;
+  --danger-bg: #3d2220;
+  --overlay: rgba(0, 0, 0, 0.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #1d2127;
+    --text: #e6e9ed;
+    --text-muted: #9aa4af;
+    --border: #353b44;
+    --accent: #4f8ef7;
+    --accent-hover: #6aa0f8;
+    --panel-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+    --surface: #252a31;
+    --hover: #2c333c;
+    --pressed: #22385c;
+    --disabled-bg: #252a31;
+    --danger: #f97066;
+    --danger-bg: #3d2220;
+    --overlay: rgba(0, 0, 0, 0.55);
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
 }
 
 html,
@@ -35,7 +86,8 @@ body,
   position: absolute;
   top: 12px;
   right: 60px;
-  z-index: 5;
+  /* Above the feature card, so the settings popover opens over it. */
+  z-index: 7;
   display: flex;
   gap: 8px;
 }
@@ -53,7 +105,7 @@ body,
 }
 
 .toolbar-button:hover {
-  background: #f5f7fa;
+  background: var(--hover);
 }
 
 /* Grid layer control, bottom-left */
@@ -73,9 +125,7 @@ body,
 .grid-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  cursor: pointer;
+  gap: 4px;
 }
 
 .grid-rows {
@@ -126,71 +176,164 @@ body,
 
 .grid-row-resolution:disabled {
   color: var(--text-muted);
-  background: #f3f4f6;
+  background: var(--disabled-bg);
 }
 
 .grid-row-resolution.too-many-cells {
-  border-color: #d92d20;
-  outline: 1px solid #d92d20;
+  border-color: var(--danger);
+  outline: 1px solid var(--danger);
 }
 
-/* Feature side panel */
+/* Feature card, bottom-right: clear of the toolbar and map controls above, and of the attribution below.
+   One size for every kind of feature, so it doesn't jump around between clicks; longer content scrolls. */
 .feature-panel {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  right: 10px;
+  bottom: 36px;
   z-index: 6;
-  width: min(360px, 100vw);
+  box-sizing: border-box;
+  width: 360px;
+  height: min(600px, calc(100% - 160px));
   background: var(--bg);
-  border-left: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   box-shadow: var(--panel-shadow);
-  padding: 20px;
+  padding: 14px 16px 16px;
   overflow-y: auto;
 }
 
-.feature-panel h2 {
-  margin: 0 0 16px;
-  font-size: 16px;
+.panel-section + .panel-section {
+  margin-top: 18px;
+}
+
+.panel-section h2 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
 }
 
 .panel-close {
   position: absolute;
-  top: 14px;
-  right: 14px;
-  background: none;
-  border: none;
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--text-muted);
+  top: 10px;
+  right: 10px;
 }
 
-.button-holder {
+/* Copy lists: one bordered group, rows split by hairlines */
+.copy-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .copy-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
-  padding: 10px 12px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: none;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
   font-size: 13px;
   text-align: left;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: #f9fafb;
   cursor: pointer;
-  word-break: break-word;
+}
+
+.copy-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.copy-row + .copy-row {
+  border-top: 1px solid var(--border);
+}
+
+/* Show on map, for coverings: split from the copy button by a hairline */
+.preview-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.preview-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.preview-toggle:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.preview-toggle[aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--pressed);
+}
+
+/* On, but too many cells to draw at this level */
+.preview-toggle[aria-pressed='true'].unavailable {
+  color: var(--text-muted);
+  background: var(--bg);
+  opacity: 0.6;
 }
 
 .copy-button:hover {
-  background: #eef2f8;
-  border-color: var(--accent);
+  background: var(--hover);
 }
 
 .copy-button:active {
-  background: #dfeaff;
+  background: var(--pressed);
+}
+
+.copy-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* What a copy did, in place of the copy icon's hint */
+.copy-status {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+[data-state='copied'] .copy-status,
+[data-state='copied'] .copy-icon {
+  color: #1f9d55;
+}
+
+[data-state='failed'] .copy-status {
+  color: var(--danger);
+}
+
+.copy-icon {
+  display: inline-flex;
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+.copy-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.copy-button:hover .copy-icon,
+.copy-value:hover .copy-icon,
+[data-state] .copy-icon {
+  opacity: 1;
 }
 
 /* Add data modal */
@@ -198,7 +341,7 @@ body,
   position: fixed;
   inset: 0;
   z-index: 10;
-  background: rgba(20, 24, 30, 0.35);
+  background: var(--overlay);
 }
 
 .modal-overlay:not([hidden]) {
@@ -238,7 +381,7 @@ body,
 }
 
 .modal-error {
-  color: #c0392b !important;
+  color: var(--danger) !important;
 }
 
 .modal-actions {
@@ -252,7 +395,8 @@ body,
   padding: 8px 16px;
   border-radius: 6px;
   border: 1px solid var(--border);
-  background: #f9fafb;
+  background: var(--surface);
+  color: var(--text);
   cursor: pointer;
   font-size: 14px;
 }
@@ -272,27 +416,10 @@ body,
     right: 12px;
   }
   .feature-panel {
-    width: 100vw;
+    left: 10px;
+    width: auto;
+    height: min(60%, calc(100% - 160px));
   }
-}
-
-/* Pasted feature properties */
-.properties-table {
-  border-collapse: collapse;
-  font-size: 12px;
-}
-
-.properties-table th,
-.properties-table td {
-  padding: 2px 6px;
-  text-align: left;
-  vertical-align: top;
-  word-break: break-word;
-}
-
-.properties-table th {
-  color: var(--text-muted);
-  font-weight: 600;
 }
 
 /* Draw toolbar */
@@ -326,7 +453,7 @@ body,
 }
 
 .draw-tool:hover:not(:disabled) {
-  background: #eef2f8;
+  background: var(--hover);
 }
 
 .draw-tool:disabled {
@@ -372,7 +499,28 @@ body,
 }
 
 .draw-chip:hover {
-  background: #eef2f8;
+  background: var(--hover);
+}
+
+.draw-divider {
+  height: 1px;
+  margin: 2px 4px;
+  background: var(--border);
+}
+
+.draw-readout {
+  cursor: default;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.draw-readout:hover {
+  background: var(--bg);
+}
+
+.draw-readout.hint {
+  color: var(--text-muted);
+  font-weight: 400;
 }
 
 .deleting .maplibregl-canvas-container.maplibregl-interactive {
@@ -405,17 +553,385 @@ body,
 }
 
 .popup-action:hover {
-  background: #eef2f8;
+  background: var(--hover);
 }
 
 .popup-action.danger {
-  color: #d92d20;
+  color: var(--danger);
 }
 
 .popup-action.danger:hover {
-  background: #fdecea;
+  background: var(--danger-bg);
 }
 
-.properties-table {
-  margin-top: 6px;
+/* Small borderless icon buttons */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.toolbar-button.icon-only {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+}
+
+.toolbar-button.active {
+  background: var(--hover);
+}
+
+/* Settings popover, under the gear */
+.settings {
+  position: relative;
+}
+
+.settings-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 240px;
+  padding: 14px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-popover[hidden] {
+  display: none;
+}
+
+.settings-group {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+
+.settings-group legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+/* Segmented control: radios in settings, tabs in the grid info */
+.segmented {
+  display: flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.segmented > label,
+.segmented > button {
+  flex: 1;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.segmented > label:hover,
+.segmented > button:hover {
+  background: var(--hover);
+}
+
+.segmented > label:has(input:checked),
+.segmented > button[aria-selected='true'] {
+  background: var(--bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  font-weight: 600;
+}
+
+.segmented > button[aria-selected='true'] {
+  color: var(--grid-color, var(--text));
+}
+
+.segmented input,
+.settings-list input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmented > label:has(input:focus-visible),
+.settings-list > label:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-list > label {
+  position: relative;
+  padding: 6px 10px 6px 28px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.settings-list > label:hover {
+  background: var(--hover);
+}
+
+.settings-list > label:has(input:checked) {
+  font-weight: 600;
+}
+
+.settings-list > label:has(input:checked)::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Grid control header: title, info, all-grids toggle */
+.grid-header-title {
+  cursor: pointer;
+}
+
+.grid-header .grid-info-button {
+  margin-right: auto;
+  width: 24px;
+  height: 24px;
+}
+
+/* Grid cell sizes */
+.modal.grid-info {
+  width: min(520px, 92vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.modal-header h2 {
+  margin: 0;
+}
+
+.grid-info-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 12px;
+}
+
+.modal p.grid-info-note {
+  font-size: 13px;
+}
+
+.grid-info-scroll {
+  overflow-y: auto;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.grid-info-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.grid-info-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-weight: 600;
+  text-align: right;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.grid-info-table td {
+  text-align: right;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.grid-info-table th:first-child,
+.grid-info-table td:first-child {
+  text-align: left;
+}
+
+.grid-info-table tr:last-child td {
+  border-bottom: none;
+}
+
+.grid-info-table tr.current td {
+  background: var(--pressed);
+  font-weight: 600;
+}
+
+/* Properties, in the side panel: measurements, pasted properties, or a cell's ID and size */
+.details-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.details-table th,
+.details-table td {
+  padding: 4px 0;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+  word-break: break-word;
+}
+
+.details-table tr:last-child th,
+.details-table tr:last-child td {
+  border-bottom: none;
+}
+
+.details-table th {
+  width: 38%;
+  padding-right: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.details-table td {
+  font-weight: 600;
+}
+
+/* The copy button cell: no wider than its button */
+.details-table td:last-child {
+  width: 1%;
+  padding: 1px 0 1px 6px;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.copy-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.copy-value:hover {
+  background: var(--hover);
+}
+
+/* Faint until wanted, unless there's no hover to reveal it */
+.details-table tr:not(:hover) .copy-value:not([data-state]) .copy-icon {
+  opacity: 0.3;
+}
+
+@media (hover: none) {
+  .details-table tr:not(:hover) .copy-value:not([data-state]) .copy-icon {
+    opacity: 0.55;
+  }
+}
+
+/* MapLibre's own controls and popups follow the theme */
+.maplibregl-ctrl-group,
+.maplibregl-popup-content,
+.maplibregl-ctrl-scale,
+.maplibregl-ctrl.maplibregl-ctrl-attrib {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.maplibregl-ctrl-attrib a,
+.maplibregl-ctrl-scale {
+  color: var(--text);
+}
+
+.maplibregl-ctrl-scale {
+  border-color: var(--text);
+}
+
+.maplibregl-ctrl-group:not(:empty) {
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.maplibregl-ctrl-group button + button {
+  border-top-color: var(--border);
+}
+
+.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--bg);
+}
+
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--bg);
+}
+
+.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--bg);
+}
+
+.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--bg);
+}
+
+:root[data-theme='dark'] .maplibregl-ctrl-icon,
+:root[data-theme='dark'] .maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .maplibregl-ctrl-icon,
+  :root:not([data-theme='light']) .maplibregl-ctrl-attrib-button {
+    filter: invert(1);
+  }
 }

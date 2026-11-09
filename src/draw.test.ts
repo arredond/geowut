@@ -2,11 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Map as MapLibreMap, MapMouseEvent } from 'maplibre-gl';
 import type { GeoJSONStoreFeatures } from 'terra-draw';
 import type { Feature, Geometry } from 'geojson';
-import { DrawController, featureGeometry, featureMeasurements, featureProperties, TOOLS } from './draw';
+import { DrawController, featureDetails, featureGeometry, featureMeasurements, featureProperties, TOOLS } from './draw';
 import type { DrawCallbacks } from './draw';
 
 const terraDrawInstance = vi.hoisted(() => ({ current: null as unknown }));
 const selectModeOptions = vi.hoisted(() => ({ current: null as any }));
+const measurer = vi.hoisted(() => ({ start: null as any, stop: null as any }));
+
+vi.mock('./measure', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./measure')>()),
+  Measurer: class {
+    start = (measurer.start = vi.fn());
+    stop = (measurer.stop = vi.fn());
+  },
+}));
 
 vi.mock('terra-draw-maplibre-gl-adapter', () => ({ TerraDrawMapLibreGLAdapter: class {} }));
 vi.mock('terra-draw', () => ({
@@ -91,6 +100,7 @@ beforeEach(() => {
     onFeatureChanged: vi.fn(),
     onFeaturesRemoved: vi.fn(),
     onMapClicked: vi.fn(),
+    onMeasurementChange: vi.fn(),
   };
   const map = {
     once: (_type: string, handler: () => void) => handler(),
@@ -127,6 +137,41 @@ describe('states', () => {
     terraDraw.enabled = false;
     controller.setState('point');
     expect(controller.state).toBe('select');
+  });
+});
+
+describe('measuring', () => {
+  it.each(['measure-line', 'measure-area'] as const)('leaves %s to the measurer, keeping features passive', (tool) => {
+    controller.setState(tool);
+    expect(terraDraw.setMode).toHaveBeenLastCalledWith('idle');
+    expect(measurer.start).toHaveBeenCalledWith(tool);
+    expect(callbacks.onStateChange).toHaveBeenCalledWith(tool);
+  });
+
+  it('stops measuring when leaving the tool', () => {
+    controller.setState('measure-line');
+    controller.setState('polygon');
+    expect(measurer.stop).toHaveBeenCalledOnce();
+  });
+
+  it('switches between measure tools without stopping', () => {
+    controller.setState('measure-line');
+    controller.setState('measure-area');
+    expect(measurer.start).toHaveBeenLastCalledWith('measure-area');
+    expect(measurer.stop).not.toHaveBeenCalled();
+  });
+
+  it('does not stop a measurer that was never started', () => {
+    controller.setState('polygon');
+    controller.setState('select');
+    expect(measurer.stop).not.toHaveBeenCalled();
+  });
+
+  it('ignores clicks on features while measuring', () => {
+    terraDraw.getFeaturesAtLngLat.mockReturnValue([stored('a')]);
+    controller.setState('measure-area');
+    clickMap(clickEvent);
+    expect(callbacks.onMapClicked).not.toHaveBeenCalled();
   });
 });
 
@@ -406,6 +451,13 @@ describe('featureMeasurements', () => {
     coordinates: [[[1, 40], [0, 41], [-1, 40], [0, 39], [1, 40]]],
   };
 
+  it('measures in miles on request', () => {
+    const line = part({ type: 'LineString', coordinates: [[0, 0], [1, 0]] });
+    expect(featureMeasurements(line, 'imperial')['Length (mi)']).toBeCloseTo(69.17, 2);
+    const square = featureMeasurements(part({ type: 'Polygon', coordinates: [ring] }), 'imperial');
+    expect(Object.keys(square)).toEqual(['Perimeter (mi)', 'Area (mi2)']);
+  });
+
   it('measures what is drawn', () => {
     expect(Object.keys(featureMeasurements(part({ type: 'Point', coordinates: [1, 2] })))).toEqual(['Latitude', 'Longitude']);
   });
@@ -427,5 +479,24 @@ describe('featureMeasurements', () => {
     const measured = featureMeasurements(part(circle, { mode: 'circle' }));
     expect(Object.keys(measured)).toEqual(['Perimeter (km)', 'Area (km2)', 'Latitude (center)', 'Longitude (center)']);
     expect(featureMeasurements(part(circle, { mode: 'polygon' }))).not.toHaveProperty('Latitude (center)');
+  });
+});
+
+describe('featureDetails', () => {
+  const part = (geometry: Geometry, properties = {}) => ({ type: 'Feature', geometry, properties }) as unknown as GeoJSONStoreFeatures;
+
+  it('lists measurements, then pasted properties', () => {
+    const line = part({ type: 'LineString', coordinates: [[0, 0], [1, 0]] }, { sourceProperties: { name: 'Centro', tags: { a: 1 }, none: null } });
+    expect(featureDetails(line, 'metric')).toEqual([
+      { label: 'Length (km)', value: '111.319' },
+      { label: 'name', value: 'Centro' },
+      { label: 'tags', value: '{"a":1}' },
+      { label: 'none', value: 'null' },
+    ]);
+  });
+
+  it('measures in the units asked for', () => {
+    const line = part({ type: 'LineString', coordinates: [[0, 0], [1, 0]] });
+    expect(featureDetails(line, 'imperial')[0].label).toBe('Length (mi)');
   });
 });

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LngLat, Map as MapLibreMap } from 'maplibre-gl';
-import { buildPopupContent, buildPropertiesTable, FeaturePopup } from './popup';
+import { buildPopupContent, FeaturePopup } from './popup';
 
 const created = vi.hoisted((): unknown[] => []);
 const popup = vi.hoisted(() => ({
@@ -20,50 +20,22 @@ vi.mock('maplibre-gl', () => ({
   },
 }));
 
-describe('buildPropertiesTable', () => {
-  it('has nothing to show without properties', () => {
-    expect(buildPropertiesTable(null)).toBeNull();
-    expect(buildPropertiesTable({})).toBeNull();
-  });
-
-  it('lists each property', () => {
-    const table = buildPropertiesTable({ name: 'Centro', id: 1 })!;
-    expect([...table.rows].map((row) => [row.cells[0].textContent, row.cells[1].textContent])).toEqual([
-      ['name', 'Centro'],
-      ['id', '1'],
-    ]);
-  });
-
-  it('shows nested values as JSON', () => {
-    const table = buildPropertiesTable({ tags: { a: 1 }, none: null })!;
-    expect(table.rows[0].cells[1].textContent).toBe('{"a":1}');
-    expect(table.rows[1].cells[1].textContent).toBe('null');
-  });
-
-  it('never interprets pasted text as HTML', () => {
-    const table = buildPropertiesTable({ '<b>key</b>': '<img src=x onerror=alert(1)>' })!;
-    expect(table.querySelector('img, b')).toBeNull();
-  });
-});
-
 describe('buildPopupContent', () => {
   const buttons = (content: HTMLElement) => [...content.querySelectorAll<HTMLButtonElement>('.popup-action')];
 
   it('always offers edit and delete', () => {
-    expect(buttons(buildPopupContent(null, { onEdit: vi.fn(), onDelete: vi.fn() })).map((b) => b.title)).toEqual(['Edit', 'Delete']);
+    expect(buttons(buildPopupContent({ onEdit: vi.fn(), onDelete: vi.fn() })).map((b) => b.title)).toEqual(['Edit', 'Delete']);
   });
 
-  it('shows no table without properties', () => {
-    expect(buildPopupContent(null, { onEdit: vi.fn(), onDelete: vi.fn() }).querySelector('table')).toBeNull();
-  });
-
-  it('shows properties when there are any', () => {
-    expect(buildPopupContent({ name: 'Centro' }, { onEdit: vi.fn(), onDelete: vi.fn() }).textContent).toContain('Centro');
+  it('holds nothing but the actions, as properties go in the side panel', () => {
+    const content = buildPopupContent({ onEdit: vi.fn(), onDelete: vi.fn() });
+    expect(content.querySelector('table')).toBeNull();
+    expect(content.textContent).toBe('');
   });
 
   it('runs the matching action', () => {
     const actions = { onEdit: vi.fn(), onDelete: vi.fn() };
-    const [edit, remove] = buttons(buildPopupContent(null, actions));
+    const [edit, remove] = buttons(buildPopupContent(actions));
     edit.click();
     expect(actions.onEdit).toHaveBeenCalledOnce();
     expect(actions.onDelete).not.toHaveBeenCalled();
@@ -82,36 +54,36 @@ describe('FeaturePopup', () => {
     created.length = 0;
   });
 
-  it('opens where clicked, even without properties', () => {
-    new FeaturePopup(map).show(null, lngLat, actions);
+  it('opens where clicked', () => {
+    new FeaturePopup(map).show(lngLat, actions);
     expect(popup.setLngLat).toHaveBeenCalledWith(lngLat);
     expect(popup.addTo).toHaveBeenCalledWith(map);
   });
 
   it('opens a new popup each time, as the old one closes itself on the same click', () => {
     const featurePopup = new FeaturePopup(map);
-    featurePopup.show(null, lngLat, actions);
-    featurePopup.show(null, lngLat, actions);
+    featurePopup.show(lngLat, actions);
+    featurePopup.show(lngLat, actions);
     expect(created).toHaveLength(2);
   });
 
   it('closes on request', () => {
     const featurePopup = new FeaturePopup(map);
-    featurePopup.show(null, lngLat, actions);
+    featurePopup.show(lngLat, actions);
     featurePopup.hide();
     expect(popup.remove).toHaveBeenCalled();
   });
 
   it('runs the delete action of the open popup', () => {
     const featurePopup = new FeaturePopup(map);
-    featurePopup.show(null, lngLat, actions);
+    featurePopup.show(lngLat, actions);
     featurePopup.deleteFeature();
     expect(actions.onDelete).toHaveBeenCalledOnce();
   });
 
   it('deletes nothing once the popup has closed', () => {
     const featurePopup = new FeaturePopup(map);
-    featurePopup.show(null, lngLat, actions);
+    featurePopup.show(lngLat, actions);
     popup.isOpen.mockReturnValueOnce(false);
     featurePopup.deleteFeature();
     expect(actions.onDelete).not.toHaveBeenCalled();

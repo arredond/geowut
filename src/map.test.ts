@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import { getPaddedViewportBbox } from './map';
+import type { StyleSpecification } from 'maplibre-gl';
+import { getPaddedViewportBbox, withOverlays } from './map';
 
 function mapWithBounds(west: number, south: number, east: number, north: number): MapLibreMap {
   return { getBounds: () => ({ getWest: () => west, getSouth: () => south, getEast: () => east, getNorth: () => north }) } as unknown as MapLibreMap;
@@ -24,5 +25,32 @@ describe('getPaddedViewportBbox', () => {
   it('becomes the whole world when zoomed far out', () => {
     const [west, , east] = getPaddedViewportBbox(mapWithBounds(-300, -80, 300, 80));
     expect([west, east]).toEqual([-180, 180]);
+  });
+});
+
+describe('withOverlays', () => {
+  const style = (sources: string[], layers: string[]): StyleSpecification => ({
+    version: 8,
+    sources: Object.fromEntries(sources.map((id) => [id, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }])),
+    layers: layers.map((id) => ({ id, type: 'background' })),
+  });
+
+  it('keeps grids and drawings, on top of the new basemap, and drops the old basemap', () => {
+    const previous = style(['openmaptiles', 'grid-h3', 'td-polygon', 'td-measure-linestring'], ['water', 'grid-h3-fill', 'td-polygon', 'td-measure-linestring']);
+    const next = style(['openmaptiles', 'ne2_shaded'], ['background', 'roads']);
+    const merged = withOverlays(previous, next);
+    expect(Object.keys(merged.sources)).toEqual(['openmaptiles', 'ne2_shaded', 'grid-h3', 'td-polygon', 'td-measure-linestring']);
+    expect(merged.layers.map((layer) => layer.id)).toEqual(['background', 'roads', 'grid-h3-fill', 'td-polygon', 'td-measure-linestring']);
+  });
+
+  it('carries over the data the overlays hold', () => {
+    const previous = style(['grid-s2'], []);
+    const merged = withOverlays(previous, style([], []));
+    expect(merged.sources['grid-s2']).toBe(previous.sources['grid-s2']);
+  });
+
+  it('takes the new style as it is on first load', () => {
+    const next = style(['openmaptiles'], ['roads']);
+    expect(withOverlays(undefined, next)).toBe(next);
   });
 });

@@ -1,6 +1,6 @@
 import * as h3 from 'h3-js';
 import { describe, expect, it } from 'vitest';
-import { coverBbox, estimateCells, MAX_RESOLUTION, MIN_RESOLUTION, resolutionForZoom } from './h3';
+import { cellPolygon, cellStats, coverBbox, estimateCells, levelStats, MAX_RESOLUTION, MIN_RESOLUTION, resolutionForZoom } from './h3';
 import type { Bbox } from './types';
 
 const MADRID: [number, number] = [-3.7, 40.4];
@@ -107,5 +107,34 @@ describe('estimateCells', () => {
     const actual = coverBbox(bbox, 7).length;
     expect(estimate).toBeGreaterThan(actual / 2);
     expect(estimate).toBeLessThan(actual * 2);
+  });
+});
+
+describe('cell sizes', () => {
+  it('gives H3\'s published averages per resolution', () => {
+    expect(levelStats(9).areaKm2).toBeCloseTo(0.1053, 4);
+    expect(levelStats(9).edgeKm).toBeCloseTo(0.2008, 4);
+  });
+
+  it('measures a cell close to its resolution\'s average', () => {
+    const cell = h3.latLngToCell(40, -3, 9);
+    const { areaKm2, edgeKm } = cellStats(cell);
+    expect(areaKm2 / levelStats(9).areaKm2).toBeGreaterThan(0.8);
+    expect(areaKm2 / levelStats(9).areaKm2).toBeLessThan(1.2);
+    expect(edgeKm / levelStats(9).edgeKm).toBeGreaterThan(0.8);
+    expect(edgeKm / levelStats(9).edgeKm).toBeLessThan(1.2);
+  });
+
+  it('averages a pentagon over its five edges', () => {
+    const [pentagon] = h3.getPentagons(5);
+    expect(cellStats(pentagon).edgeKm / levelStats(5).edgeKm).toBeGreaterThan(0.7);
+    expect(cellStats(pentagon).edgeKm / levelStats(5).edgeKm).toBeLessThan(1.3);
+  });
+});
+
+describe('cellPolygon', () => {
+  it('outlines the cell as the grid layer draws it', () => {
+    const [cell] = coverBbox([-3.7, 40.4, -3.69, 40.41], 7);
+    expect(cellPolygon(cell.properties.id)).toEqual(cell.geometry);
   });
 });

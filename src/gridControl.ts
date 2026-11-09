@@ -1,4 +1,5 @@
 import type { GridLayer } from './grids';
+import { ICONS } from './icons';
 
 export class GridControl {
   readonly root: HTMLElement;
@@ -7,7 +8,10 @@ export class GridControl {
   private allGridsToggle!: HTMLInputElement;
   private layerToggles = new Map<GridLayer, HTMLInputElement>();
 
-  constructor(container: HTMLElement, layers: GridLayer[]) {
+  private onInfo: () => void;
+
+  constructor(container: HTMLElement, layers: GridLayer[], onInfo: () => void = () => {}) {
+    this.onInfo = onInfo;
     this.root = document.createElement('div');
     this.root.className = 'grid-control';
 
@@ -25,11 +29,22 @@ export class GridControl {
   }
 
   private buildHeader(): HTMLElement {
-    const header = document.createElement('label');
+    const header = document.createElement('div');
     header.className = 'grid-header';
 
+    // Only the title toggles the grids, so the info button beside it doesn't.
+    const title = document.createElement('label');
+    title.className = 'grid-header-title';
     const heading = document.createElement('h3');
     heading.textContent = 'Grid layers';
+
+    const info = document.createElement('button');
+    info.type = 'button';
+    info.className = 'icon-button grid-info-button';
+    info.title = 'Cell sizes per level';
+    info.setAttribute('aria-label', 'Cell sizes per level');
+    info.innerHTML = ICONS.info;
+    info.addEventListener('click', () => this.onInfo());
 
     this.allGridsToggle = document.createElement('input');
     this.allGridsToggle.type = 'checkbox';
@@ -39,7 +54,10 @@ export class GridControl {
       this.syncVisibility();
     });
 
-    header.append(heading, this.allGridsToggle);
+    this.allGridsToggle.id = 'grid-all-toggle';
+    title.htmlFor = this.allGridsToggle.id;
+    title.appendChild(heading);
+    header.append(title, info, this.allGridsToggle);
     return header;
   }
 

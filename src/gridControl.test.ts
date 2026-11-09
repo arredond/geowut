@@ -23,6 +23,7 @@ function fakeLayer(id: string): GridLayer {
 
 describe('GridControl', () => {
   let layers: GridLayer[];
+  let onInfo: ReturnType<typeof vi.fn<() => void>>;
   const rows = () => document.querySelector<HTMLElement>('.grid-rows')!;
   const allGrids = () => document.querySelector<HTMLInputElement>('.grid-header input')!;
   const layerToggle = (i: number) => document.querySelectorAll<HTMLInputElement>('.grid-row-label input')[i];
@@ -33,7 +34,19 @@ describe('GridControl', () => {
   beforeEach(() => {
     document.body.replaceChildren();
     layers = [fakeLayer('h3'), fakeLayer('s2')];
-    new GridControl(document.body, layers);
+    onInfo = vi.fn<() => void>();
+    new GridControl(document.body, layers, onInfo);
+  });
+
+  it('opens the cell sizes from the info button, without toggling the grids', () => {
+    document.querySelector<HTMLButtonElement>('[title="Cell sizes per level"]')!.click();
+    expect(onInfo).toHaveBeenCalledOnce();
+    expect(allGrids().checked).toBe(true);
+  });
+
+  it('toggles every grid from the title', () => {
+    document.querySelector<HTMLElement>('.grid-header-title')!.click();
+    expect(allGrids().checked).toBe(false);
   });
 
   it('starts expanded, with no layers on and auto on', () => {

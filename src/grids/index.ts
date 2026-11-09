@@ -1,61 +1,82 @@
 import type { Map as MapLibreMap, GeoJSONSource, PointLike } from 'maplibre-gl';
-import type { FeatureCollection } from 'geojson';
-import type { Bbox, GridCellFeature } from './types';
+import type { FeatureCollection, Polygon } from 'geojson';
+import type { Bbox, CellStats, GridCellFeature } from './types';
 import { getPaddedViewportBbox } from '../map';
 import * as h3Grid from './h3';
 import * as quadkeyGrid from './quadkey';
 import * as s2Grid from './s2';
+import { formatArea, formatLength } from '../units';
+import type { Units } from '../units';
 
 export type GridId = 'h3' | 'quadkey' | 's2';
 
 interface GridDefinition {
   id: GridId;
   label: string;
-  cellName: string;
   color: string;
   minResolution: number;
   maxResolution: number;
   resolutionForZoom: (zoom: number) => number;
   estimateCells: (bbox: Bbox, resolution: number) => number;
   coverBbox: (bbox: Bbox, resolution: number) => GridCellFeature[];
+  /** What the resolution is called in this grid, as in 'res 9' or 'zoom 12'. */
+  resolutionName: string;
+  /** Typical cell size at a resolution, for the reference table. */
+  levelStats: (resolution: number) => CellStats;
+  /** What the typical size stands for. */
+  levelStatsNote: string;
+  cellStats: (id: string) => CellStats;
+  cellPolygon: (id: string) => Polygon;
 }
 
 /** Above this many cells a grid isn't worth computing or drawing: it would hang the page and be unreadable anyway. */
-const MAX_GRID_CELLS = 10_000;
+export const MAX_GRID_CELLS = 10_000;
 
 export const GRID_DEFINITIONS: GridDefinition[] = [
   {
     id: 'h3',
     label: 'H3 cells',
-    cellName: 'H3 cell',
     color: '#e4572e',
     minResolution: h3Grid.MIN_RESOLUTION,
     maxResolution: h3Grid.MAX_RESOLUTION,
     resolutionForZoom: h3Grid.resolutionForZoom,
     estimateCells: h3Grid.estimateCells,
     coverBbox: h3Grid.coverBbox,
+    resolutionName: 'Resolution',
+    levelStats: h3Grid.levelStats,
+    levelStatsNote: 'Averages over all cells: the hexagons and the 12 pentagons of every resolution.',
+    cellStats: h3Grid.cellStats,
+    cellPolygon: h3Grid.cellPolygon,
   },
   {
     id: 'quadkey',
     label: 'Quadkeys',
-    cellName: 'Quadkey',
     color: '#2e8b57',
     minResolution: quadkeyGrid.MIN_ZOOM,
     maxResolution: quadkeyGrid.MAX_ZOOM,
     resolutionForZoom: quadkeyGrid.resolutionForZoom,
     estimateCells: quadkeyGrid.estimateCells,
     coverBbox: quadkeyGrid.coverBbox,
+    resolutionName: 'Zoom',
+    levelStats: quadkeyGrid.levelStats,
+    levelStatsNote: 'Tiles on the equator, the largest. Away from it they shrink with the cosine of latitude: at 60°, edges are half as long and areas a quarter.',
+    cellStats: quadkeyGrid.cellStats,
+    cellPolygon: quadkeyGrid.cellPolygon,
   },
   {
     id: 's2',
     label: 'S2 cells',
-    cellName: 'S2 cell',
     color: '#3468c0',
     minResolution: s2Grid.MIN_LEVEL,
     maxResolution: s2Grid.MAX_LEVEL,
     resolutionForZoom: s2Grid.resolutionForZoom,
     estimateCells: s2Grid.estimateCells,
     coverBbox: s2Grid.coverBbox,
+    resolutionName: 'Level',
+    levelStats: s2Grid.levelStats,
+    levelStatsNote: 'Averages over all cells. The largest cells of a level are about twice the area of the smallest.',
+    cellStats: s2Grid.cellStats,
+    cellPolygon: s2Grid.cellPolygon,
   },
 ];
 
@@ -77,13 +98,23 @@ export function gridCellAtPoint(map: MapLibreMap, layers: GridLayer[], point: Po
   return layer && cell ? { layer, cell } : undefined;
 }
 
-/** What to copy for a cell, beyond what any geometry offers. */
-export function cellCopyValues({ layer, cell }: GridCellHit): { label: string; value: string }[] {
+/** Read at click time: the layer's resolution moves on with the zoom. */
+export function cellDetails({ layer, cell }: GridCellHit): (units: Units) => { label: string; value: string }[] {
   const { id, googleTile, tmsTile } = cell.properties;
-  const values = [{ label: layer.def.cellName, value: id }];
-  if (googleTile) values.push({ label: 'Google tile (Z/X/Y)', value: String(googleTile) });
-  if (tmsTile) values.push({ label: 'TMS tile (Z/X/Y)', value: String(tmsTile) });
-  return values;
+  const level = layer.resolution;
+  const { areaKm2, edgeKm } = layer.def.cellStats(id);
+  // Quadkeys are map tiles too, which other tools name by Z/X/Y.
+  const tiles = [
+    ...(googleTile ? [{ label: 'Google tile (Z/X/Y)', value: String(googleTile) }] : []),
+    ...(tmsTile ? [{ label: 'TMS tile (Z/X/Y)', value: String(tmsTile) }] : []),
+  ];
+  return (units) => [
+    { label: 'ID', value: id },
+    { label: layer.def.resolutionName, value: String(level) },
+    ...tiles,
+    { label: 'Area', value: formatArea(areaKm2, units) },
+    { label: 'Edge length (avg)', value: formatLength(edgeKm, units) },
+  ];
 }
 
 export class GridLayer {
@@ -96,8 +127,10 @@ export class GridLayer {
   private cells = new Map<string, GridCellFeature>();
   visible = false;
   auto = true;
+  private labelHalo = '#ffffff';
   resolution: number;
   onResolutionChange?: (resolution: number) => void;
+  private resolutionListeners: (() => void)[] = [];
   onTooManyCellsChange?: (tooManyCells: boolean) => void;
 
   constructor(map: MapLibreMap, def: GridDefinition) {
@@ -136,12 +169,14 @@ export class GridLayer {
       layout: {
         visibility: 'none',
         'text-field': ['get', 'label'],
+        // MapLibre's default font isn't on OpenFreeMap's glyph server, which every basemap uses.
+        'text-font': ['Noto Sans Regular'],
         'text-size': 11,
         'text-allow-overlap': false,
       },
       paint: {
         'text-color': this.def.color,
-        'text-halo-color': '#ffffff',
+        'text-halo-color': this.labelHalo,
         'text-halo-width': 1.2,
       },
     });
@@ -151,6 +186,12 @@ export class GridLayer {
     };
     this.map.on('mouseenter', this.labelLayerId, setCursor('pointer'));
     this.map.on('mouseleave', this.labelLayerId, setCursor(''));
+  }
+
+  /** Labels stand out from the basemap with a halo of its own lightness. */
+  setLabelHalo(color: string): void {
+    this.labelHalo = color;
+    if (this.map.getLayer(this.labelLayerId)) this.map.setPaintProperty(this.labelLayerId, 'text-halo-color', color);
   }
 
   /** Cells keep their exact geometry here: rendered features only hold a version clipped to map tiles. */
@@ -168,9 +209,20 @@ export class GridLayer {
     else this.clear();
   }
 
-  setResolution(resolution: number): void {
-    this.resolution = Math.max(this.def.minResolution, Math.min(this.def.maxResolution, Math.round(resolution)));
+  /** Others that follow the resolution, beyond the grid control's own field: told only when it actually changes. */
+  addResolutionListener(listener: () => void): void {
+    this.resolutionListeners.push(listener);
+  }
+
+  private announceResolution(previous: number): void {
     this.onResolutionChange?.(this.resolution);
+    if (this.resolution !== previous) for (const listener of this.resolutionListeners) listener();
+  }
+
+  setResolution(resolution: number): void {
+    const previous = this.resolution;
+    this.resolution = Math.max(this.def.minResolution, Math.min(this.def.maxResolution, Math.round(resolution)));
+    this.announceResolution(previous);
     if (this.visible) this.refresh();
   }
 
@@ -183,8 +235,9 @@ export class GridLayer {
   /** In auto mode, recompute the resolution for the current zoom (called on zoomend; the moveend that follows refreshes). */
   resetResolutionForZoom(): void {
     if (!this.auto) return;
+    const previous = this.resolution;
     this.resolution = this.def.resolutionForZoom(this.map.getZoom());
-    this.onResolutionChange?.(this.resolution);
+    this.announceResolution(previous);
   }
 
   refresh(): void {
@@ -205,4 +258,4 @@ export class GridLayer {
   }
 }
 
-export type { Bbox, GridCellFeature } from './types';
+export type { Bbox, CellStats, GridCellFeature } from './types';
