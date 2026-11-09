@@ -1,4 +1,4 @@
-import type { Feature, Polygon } from 'geojson';
+import type { Feature, Polygon } from "geojson";
 
 /** A cell's size: its area and the mean length of its edges. */
 export interface CellStats {

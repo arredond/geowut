@@ -1,10 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { GridControl } from './gridControl';
-import type { GridLayer } from './grids';
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { GridControl } from "./gridControl";
+import type { GridLayer } from "./grids";
 
 function fakeLayer(id: string): GridLayer {
   const layer = {
-    def: { id, label: `${id} cells`, color: '#000', minResolution: 0, maxResolution: 20 },
+    def: {
+      id,
+      label: `${id} cells`,
+      color: "#000",
+      minResolution: 0,
+      maxResolution: 20,
+    },
     visible: false,
     auto: true,
     resolution: 5,
@@ -21,35 +27,41 @@ function fakeLayer(id: string): GridLayer {
   return layer as unknown as GridLayer;
 }
 
-describe('GridControl', () => {
+describe("GridControl", () => {
   let layers: GridLayer[];
   let onInfo: ReturnType<typeof vi.fn<() => void>>;
-  const rows = () => document.querySelector<HTMLElement>('.grid-rows')!;
-  const allGrids = () => document.querySelector<HTMLInputElement>('.grid-header input')!;
-  const layerToggle = (i: number) => document.querySelectorAll<HTMLInputElement>('.grid-row-label input')[i];
-  const autoToggle = (i: number) => document.querySelectorAll<HTMLInputElement>('.grid-row-auto input')[i];
-  const resolution = (i: number) => document.querySelectorAll<HTMLInputElement>('.grid-row-resolution')[i];
+  const rows = () => document.querySelector<HTMLElement>(".grid-rows")!;
+  const allGrids = () =>
+    document.querySelector<HTMLInputElement>(".grid-header input")!;
+  const layerToggle = (i: number) =>
+    document.querySelectorAll<HTMLInputElement>(".grid-row-label input")[i];
+  const autoToggle = (i: number) =>
+    document.querySelectorAll<HTMLInputElement>(".grid-row-auto input")[i];
+  const resolution = (i: number) =>
+    document.querySelectorAll<HTMLInputElement>(".grid-row-resolution")[i];
   const toggle = (input: HTMLInputElement) => input.click();
 
   beforeEach(() => {
     document.body.replaceChildren();
-    layers = [fakeLayer('h3'), fakeLayer('s2')];
+    layers = [fakeLayer("h3"), fakeLayer("s2")];
     onInfo = vi.fn<() => void>();
     new GridControl(document.body, layers, onInfo);
   });
 
-  it('opens the cell sizes from the info button, without toggling the grids', () => {
-    document.querySelector<HTMLButtonElement>('[title="Cell sizes per level"]')!.click();
+  it("opens the cell sizes from the info button, without toggling the grids", () => {
+    document
+      .querySelector<HTMLButtonElement>('[title="Cell sizes per level"]')!
+      .click();
     expect(onInfo).toHaveBeenCalledOnce();
     expect(allGrids().checked).toBe(true);
   });
 
-  it('toggles every grid from the title', () => {
-    document.querySelector<HTMLElement>('.grid-header-title')!.click();
+  it("toggles every grid from the title", () => {
+    document.querySelector<HTMLElement>(".grid-header-title")!.click();
     expect(allGrids().checked).toBe(false);
   });
 
-  it('starts expanded, with no layers on and auto on', () => {
+  it("starts expanded, with no layers on and auto on", () => {
     expect(rows().hidden).toBe(false);
     expect(allGrids().checked).toBe(true);
     expect(layerToggle(0).checked).toBe(false);
@@ -57,21 +69,21 @@ describe('GridControl', () => {
     expect(resolution(0).disabled).toBe(true);
   });
 
-  it('toggles a single layer', () => {
+  it("toggles a single layer", () => {
     toggle(layerToggle(0));
     expect(layers[0].setVisible).toHaveBeenCalledWith(true);
     expect(layers[1].setVisible).not.toHaveBeenCalled();
   });
 
-  describe('top-level toggle', () => {
-    it('collapses the card and hides every layer', () => {
+  describe("top-level toggle", () => {
+    it("collapses the card and hides every layer", () => {
       toggle(layerToggle(0));
       toggle(allGrids());
       expect(rows().hidden).toBe(true);
       expect(layers[0].visible).toBe(false);
     });
 
-    it('brings back only the layers that were on', () => {
+    it("brings back only the layers that were on", () => {
       toggle(layerToggle(0));
       toggle(allGrids());
       toggle(allGrids());
@@ -82,8 +94,8 @@ describe('GridControl', () => {
     });
   });
 
-  describe('auto toggle', () => {
-    it('unlocks the resolution when off, locks it when on', () => {
+  describe("auto toggle", () => {
+    it("unlocks the resolution when off, locks it when on", () => {
       toggle(autoToggle(0));
       expect(layers[0].setAuto).toHaveBeenLastCalledWith(false);
       expect(resolution(0).disabled).toBe(false);
@@ -94,34 +106,34 @@ describe('GridControl', () => {
       expect(resolution(0).disabled).toBe(true);
     });
 
-    it('is independent of the layer checkbox', () => {
+    it("is independent of the layer checkbox", () => {
       toggle(autoToggle(0));
       expect(layerToggle(0).checked).toBe(false);
     });
   });
 
-  it('applies typed resolutions, showing the clamped value', () => {
+  it("applies typed resolutions, showing the clamped value", () => {
     vi.mocked(layers[0].setResolution).mockImplementation(() => {
       layers[0].resolution = 20;
     });
-    resolution(0).value = '99';
-    resolution(0).dispatchEvent(new Event('change'));
+    resolution(0).value = "99";
+    resolution(0).dispatchEvent(new Event("change"));
     expect(layers[0].setResolution).toHaveBeenCalledWith(99);
-    expect(resolution(0).value).toBe('20');
+    expect(resolution(0).value).toBe("20");
   });
 
-  it('follows resolution changes from zooming', () => {
+  it("follows resolution changes from zooming", () => {
     layers[0].onResolutionChange!(11);
-    expect(resolution(0).value).toBe('11');
+    expect(resolution(0).value).toBe("11");
   });
 
-  it('flags resolutions with too many cells to draw', () => {
+  it("flags resolutions with too many cells to draw", () => {
     layers[0].onTooManyCellsChange!(true);
-    expect(resolution(0).classList.contains('too-many-cells')).toBe(true);
-    expect(resolution(0).title).not.toBe('');
+    expect(resolution(0).classList.contains("too-many-cells")).toBe(true);
+    expect(resolution(0).title).not.toBe("");
 
     layers[0].onTooManyCellsChange!(false);
-    expect(resolution(0).classList.contains('too-many-cells')).toBe(false);
-    expect(resolution(0).title).toBe('');
+    expect(resolution(0).classList.contains("too-many-cells")).toBe(false);
+    expect(resolution(0).title).toBe("");
   });
 });

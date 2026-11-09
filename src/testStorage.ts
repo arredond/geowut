@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { vi } from "vitest";
 
 /** Node's own localStorage shadows jsdom's, and needs a file to work, so tests get an in-memory one. */
 function memoryStorage(): Storage {
@@ -14,4 +14,4 @@ function memoryStorage(): Storage {
     key: (index) => [...items.keys()][index] ?? null,
   };
 }
-vi.stubGlobal('localStorage', memoryStorage());
+vi.stubGlobal("localStorage", memoryStorage());

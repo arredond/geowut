@@ -18,13 +18,13 @@
   font-family:
     system-ui,
     -apple-system,
-    'Segoe UI',
+    "Segoe UI",
     Roboto,
     sans-serif;
 }
 
 /* Dark: chosen outright, or by the system when the theme is auto */
-:root[data-theme='dark'] {
+:root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #1d2127;
   --text: #e6e9ed;
@@ -43,7 +43,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
     --bg: #1d2127;
     --text: #e6e9ed;
@@ -279,13 +279,13 @@ body,
   color: var(--text);
 }
 
-.preview-toggle[aria-pressed='true'] {
+.preview-toggle[aria-pressed="true"] {
   color: var(--accent);
   background: var(--pressed);
 }
 
 /* On, but too many cells to draw at this level */
-.preview-toggle[aria-pressed='true'].unavailable {
+.preview-toggle[aria-pressed="true"].unavailable {
   color: var(--text-muted);
   background: var(--bg);
   opacity: 0.6;
@@ -310,12 +310,12 @@ body,
   color: var(--text-muted);
 }
 
-[data-state='copied'] .copy-status,
-[data-state='copied'] .copy-icon {
+[data-state="copied"] .copy-status,
+[data-state="copied"] .copy-icon {
   color: #1f9d55;
 }
 
-[data-state='failed'] .copy-status {
+[data-state="failed"] .copy-status {
   color: var(--danger);
 }
 
@@ -666,13 +666,13 @@ body,
 }
 
 .segmented > label:has(input:checked),
-.segmented > button[aria-selected='true'] {
+.segmented > button[aria-selected="true"] {
   background: var(--bg);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
   font-weight: 600;
 }
 
-.segmented > button[aria-selected='true'] {
+.segmented > button[aria-selected="true"] {
   color: var(--grid-color, var(--text));
 }
 
@@ -712,7 +712,7 @@ body,
 }
 
 .settings-list > label:has(input:checked)::before {
-  content: '';
+  content: "";
   position: absolute;
   left: 11px;
   top: 50%;
@@ -924,14 +924,14 @@ body,
   border-left-color: var(--bg);
 }
 
-:root[data-theme='dark'] .maplibregl-ctrl-icon,
-:root[data-theme='dark'] .maplibregl-ctrl-attrib-button {
+:root[data-theme="dark"] .maplibregl-ctrl-icon,
+:root[data-theme="dark"] .maplibregl-ctrl-attrib-button {
   filter: invert(1);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .maplibregl-ctrl-icon,
-  :root:not([data-theme='light']) .maplibregl-ctrl-attrib-button {
+  :root:not([data-theme="light"]) .maplibregl-ctrl-icon,
+  :root:not([data-theme="light"]) .maplibregl-ctrl-attrib-button {
     filter: invert(1);
   }
 }

@@ -1,7 +1,7 @@
-import { s1, s2, geojson as s2geojson } from 's2js';
-import type { Polygon } from 'geojson';
-import { bboxAreaKm2, ringMeasurements } from '../geometry';
-import type { Bbox, CellStats, GridCellFeature } from './types';
+import { s1, s2, geojson as s2geojson } from "s2js";
+import type { Polygon } from "geojson";
+import { bboxAreaKm2, ringMeasurements } from "../geometry";
+import type { Bbox, CellStats, GridCellFeature } from "./types";
 
 export const MIN_LEVEL = 1;
 export const MAX_LEVEL = 24;
@@ -19,7 +19,7 @@ export function resolutionForZoom(zoom: number): number {
 function bboxToPolygonGeometry(bbox: Bbox): Polygon {
   const [west, south, east, north] = bbox;
   return {
-    type: 'Polygon',
+    type: "Polygon",
     coordinates: [
       [
         [west, south],
@@ -45,17 +45,25 @@ function cellToPolygonRing(cellId: bigint): number[][] {
 
 /** S2's averages over all the cells of a level. */
 export function levelStats(level: number): CellStats {
-  return { areaKm2: EARTH_SURFACE_KM2 / (6 * 4 ** level), edgeKm: (AVG_EDGE_LEVEL_0 * EARTH_RADIUS_KM) / 2 ** level };
+  return {
+    areaKm2: EARTH_SURFACE_KM2 / (6 * 4 ** level),
+    edgeKm: (AVG_EDGE_LEVEL_0 * EARTH_RADIUS_KM) / 2 ** level,
+  };
 }
 
 /** S2 edges are geodesics, so tracing the corners is exact. */
 export function cellStats(token: string): CellStats {
-  const { areaKm2, perimeterKm } = ringMeasurements(cellToPolygonRing(s2.cellid.fromToken(token)));
+  const { areaKm2, perimeterKm } = ringMeasurements(
+    cellToPolygonRing(s2.cellid.fromToken(token)),
+  );
   return { areaKm2, edgeKm: perimeterKm / 4 };
 }
 
 export function cellPolygon(token: string): Polygon {
-  return { type: 'Polygon', coordinates: [cellToPolygonRing(s2.cellid.fromToken(token))] };
+  return {
+    type: "Polygon",
+    coordinates: [cellToPolygonRing(s2.cellid.fromToken(token))],
+  };
 }
 
 export function estimateCells(bbox: Bbox, level: number): number {
@@ -64,15 +72,19 @@ export function estimateCells(bbox: Bbox, level: number): number {
 }
 
 export function coverBbox(bbox: Bbox, level: number): GridCellFeature[] {
-  const coverer = new s2geojson.RegionCoverer({ minLevel: level, maxLevel: level, maxCells: 4096 });
+  const coverer = new s2geojson.RegionCoverer({
+    minLevel: level,
+    maxLevel: level,
+    maxCells: 4096,
+  });
   const cellUnion = coverer.covering(bboxToPolygonGeometry(bbox));
 
   return cellUnion.map((cellId) => {
     const token = s2.cellid.toToken(cellId);
     return {
-      type: 'Feature',
+      type: "Feature",
       properties: { id: token, label: token },
-      geometry: { type: 'Polygon', coordinates: [cellToPolygonRing(cellId)] },
+      geometry: { type: "Polygon", coordinates: [cellToPolygonRing(cellId)] },
     };
   });
 }
