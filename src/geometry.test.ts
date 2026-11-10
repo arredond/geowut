@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Geometry } from "geojson";
 import {
+  zRange,
   bboxAreaKm2,
   bboxToString,
   circleCenter,
@@ -373,5 +374,36 @@ describe("circleCenter", () => {
     const center = circleCenter(sphericalCircle([lng, lat], 500));
     expect(center["Longitude (center)"]).toBeCloseTo(lng, 4);
     expect(center["Latitude (center)"]).toBeCloseTo(lat, 4);
+  });
+});
+
+describe("zRange", () => {
+  it("finds the lowest and highest Z", () => {
+    expect(
+      zRange({
+        type: "LineString",
+        coordinates: [
+          [0, 0, 650],
+          [1, 1, 670],
+          [2, 2],
+        ],
+      }),
+    ).toEqual([650, 670]);
+  });
+
+  it("looks inside collections", () => {
+    expect(
+      zRange({
+        type: "GeometryCollection",
+        geometries: [
+          { type: "Point", coordinates: [0, 0, 5] },
+          { type: "Point", coordinates: [0, 0, -2] },
+        ],
+      }),
+    ).toEqual([-2, 5]);
+  });
+
+  it("is null without Z", () => {
+    expect(zRange({ type: "Point", coordinates: [0, 0] })).toBeNull();
   });
 });

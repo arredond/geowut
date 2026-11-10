@@ -50,6 +50,33 @@ export function geometryBbox(geometry: Geometry): Bbox {
   return [west, south, east, north];
 }
 
+/**
+ * The lowest and highest Z of a geometry, or null if it has none: Z, its third ordinate, is
+ * usually altitude, in metres. Positions without one, in a geometry that has some, don't count.
+ */
+export function zRange(geometry: Geometry): [number, number] | null {
+  let min = Infinity;
+  let max = -Infinity;
+  const walk = (coords: unknown): void => {
+    if (!Array.isArray(coords)) return; // Malformed: nothing to find.
+    if (typeof coords[0] === "number") {
+      const z = (coords as Position)[2];
+      if (typeof z === "number" && Number.isFinite(z)) {
+        min = Math.min(min, z);
+        max = Math.max(max, z);
+      }
+    } else coords.forEach(walk);
+  };
+  if (geometry.type === "GeometryCollection")
+    for (const part of geometry.geometries ?? []) {
+      const range = zRange(part);
+      if (range)
+        [min, max] = [Math.min(min, range[0]), Math.max(max, range[1])];
+    }
+  else walk(geometry.coordinates);
+  return min <= max ? [min, max] : null;
+}
+
 /** Center of the geometry's bounding box (matches Leaflet's LatLngBounds.getCenter semantics). */
 export function geometryCenter(geometry: Geometry): [number, number] {
   if (geometry.type === "Point") {

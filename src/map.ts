@@ -17,8 +17,8 @@ setWorkerUrl(maplibreWorkerUrl);
 
 const MAX_MERCATOR_LAT = 85.05;
 
-/** Sources and layers of our own (grids, Terra Draw's 'td' and 'td-measure'), as opposed to the basemap's. */
-const OVERLAY_PREFIXES = ["grid-", "td-"];
+/** Sources and layers of our own (grids, Terra Draw's 'td' and 'td-measure', polygon extrusion), as opposed to the basemap's. */
+const OVERLAY_PREFIXES = ["grid-", "td-", "z-"];
 const isOverlay = (id: string) =>
   OVERLAY_PREFIXES.some((prefix) => id.startsWith(prefix));
 
@@ -58,10 +58,91 @@ export function createMap(
   startAttributionCollapsed(map);
   const scale = new ScaleControl({ unit: units });
 
-  map.addControl(new NavigationControl(), "top-right");
+  // The needle leans as the map tilts, so a tilted map shows it; dragging it tilts too.
+  const navigation = new NavigationControl({ visualizePitch: true });
+  map.addControl(navigation, "top-right");
+  enableCompassTilt(map, navigation);
   map.addControl(scale, "bottom-left");
 
   return { map, scale };
+}
+
+/** How far a click on the compass tilts the map, in degrees: enough to see extruded polygons stand. */
+export const COMPASS_TILT = 50;
+
+const DRAG_HINT = "Ctrl+drag the map to tilt and rotate it";
+
+/** What clicking the compass does: tilt a flat, north-up map, or set any other back to that. */
+export function compassAction(
+  bearing: number,
+  pitch: number,
+): "tilt" | "reset" {
+  // Rotated a hair by a gesture still counts as rotated, but floating-point noise doesn't.
+  return Math.abs(bearing) < 0.01 && pitch < 0.01 ? "tilt" : "reset";
+}
+
+/** What the compass's tooltip says: what a click does, then how to tilt and rotate by hand. */
+export function compassHint(
+  bearing: number,
+  pitch: number,
+): { action: string; help: string } {
+  return {
+    action:
+      compassAction(bearing, pitch) === "tilt"
+        ? "Tilt the map"
+        : "Reset rotation and tilt",
+    help: DRAG_HINT,
+  };
+}
+
+/** The same, as one label for screen readers. */
+export function compassTitle(bearing: number, pitch: number): string {
+  const { action, help } = compassHint(bearing, pitch);
+  return `${action}. ${help}.`;
+}
+
+/**
+ * Makes the compass a way into the tilted view, which extruded polygons need and few find:
+ * clicking it tilts a flat map, and on a tilted or rotated one resets both, where MapLibre's
+ * resets only the rotation. Dragging it rotates and tilts the map, as MapLibre has it.
+ */
+function enableCompassTilt(map: Map, navigation: NavigationControl): void {
+  const compass = navigation._compass;
+  if (!compass) return;
+  // Our own tooltip, shown at once on hover, where the browser's (from title) takes a second or
+  // so. Screen readers get the same through the label instead.
+  const hint = document.createElement("span");
+  hint.className = "compass-hint";
+  hint.setAttribute("aria-hidden", "true");
+  const action = document.createElement("strong");
+  const help = document.createElement("span");
+  hint.append(action, help);
+  compass.appendChild(hint);
+  compass.removeAttribute("title");
+
+  const updateTitle = () => {
+    const [bearing, pitch] = [map.getBearing(), map.getPitch()];
+    const text = compassHint(bearing, pitch);
+    action.textContent = text.action;
+    help.textContent = text.help;
+    compass.setAttribute("aria-label", compassTitle(bearing, pitch));
+  };
+  // Caught on the way down, before MapLibre's own click handler on the button. A drag that
+  // rotated the map has its click swallowed by MapLibre before it gets here.
+  navigation._container.addEventListener(
+    "click",
+    (e) => {
+      if (!compass.contains(e.target as Node)) return;
+      e.stopPropagation();
+      if (compassAction(map.getBearing(), map.getPitch()) === "tilt")
+        map.easeTo({ pitch: COMPASS_TILT });
+      else map.easeTo({ bearing: 0, pitch: 0 });
+    },
+    { capture: true },
+  );
+  map.on("rotate", updateTitle);
+  map.on("pitch", updateTitle);
+  updateTitle();
 }
 
 /**

@@ -46,13 +46,23 @@ describe("Toolbar", () => {
       "Delete features",
       "Undo",
       "Redo",
-      "Export all features as GeoJSON",
+      "Nothing to export yet: draw or add some features",
     ]);
   });
 
-  it("exports", () => {
-    button("Export all features as GeoJSON").click();
+  it("exports only once there are features", () => {
+    const exportButton = () =>
+      document.querySelector<HTMLButtonElement>(
+        '[aria-label="Export all features as GeoJSON"]',
+      )!;
+    expect(exportButton().disabled).toBe(true);
+    toolbar.setHasFeatures(true);
+    expect(exportButton().disabled).toBe(false);
+    expect(exportButton().title).toBe("Export all features as GeoJSON");
+    exportButton().click();
     expect(actions.exportAll).toHaveBeenCalledOnce();
+    toolbar.setHasFeatures(false);
+    expect(exportButton().disabled).toBe(true);
   });
 
   it("picks a tool", () => {

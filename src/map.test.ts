@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import type { StyleSpecification } from "maplibre-gl";
-import { basemapStyle, getPaddedViewportBbox, withOverlays } from "./map";
+import {
+  basemapStyle,
+  compassAction,
+  compassHint,
+  compassTitle,
+  getPaddedViewportBbox,
+  withOverlays,
+} from "./map";
 
 function mapWithBounds(
   west: number,
@@ -123,5 +130,32 @@ describe("basemapStyle", () => {
     expect(basemapStyle({ basemap: "custom", customBasemap: null })).toBe(
       "https://tiles.openfreemap.org/styles/liberty",
     );
+  });
+});
+
+describe("the compass", () => {
+  it("says what a click does, then how to tilt and rotate by hand", () => {
+    expect(compassHint(0, 0)).toEqual({
+      action: "Tilt the map",
+      help: "Ctrl+drag the map to tilt and rotate it",
+    });
+    expect(compassHint(10, 40).action).toBe("Reset rotation and tilt");
+  });
+
+  it("tilts a flat, north-up map", () => {
+    expect(compassAction(0, 0)).toBe("tilt");
+    expect(compassTitle(0, 0)).toBe(
+      "Tilt the map. Ctrl+drag the map to tilt and rotate it.",
+    );
+  });
+
+  it.each([
+    [0, 50],
+    [45, 0],
+    [-0.5, 0],
+    [30, 20],
+  ])("resets rotation and tilt at bearing %d, pitch %d", (bearing, pitch) => {
+    expect(compassAction(bearing, pitch)).toBe("reset");
+    expect(compassTitle(bearing, pitch)).toMatch(/^Reset rotation and tilt\./);
   });
 });

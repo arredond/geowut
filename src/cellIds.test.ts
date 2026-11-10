@@ -2,7 +2,7 @@ import * as a5 from "a5-js";
 import * as h3 from "h3-js";
 import { s2 } from "s2js";
 import { describe, expect, it } from "vitest";
-import { parseFeatures } from "./addDataModal";
+import { parseFeatures } from "./formats/text";
 import { cellReadings, parseCellIds } from "./cellIds";
 
 const MADRID = { lat: 40.4, lng: -3.7 };

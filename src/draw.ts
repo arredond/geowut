@@ -21,7 +21,7 @@ import type {
   Polygon,
   Position,
 } from "geojson";
-import { circleCenter, measureGeometry } from "./geometry";
+import { circleCenter, measureGeometry, zRange } from "./geometry";
 import { Measurer, MEASURE_TOOLS } from "./measure";
 import type { Measurement, MeasureTool } from "./measure";
 import type { DetailRow } from "./panel";
@@ -52,6 +52,11 @@ export interface DrawCallbacks {
   /** A feature was just drawn or edited. */
   onFeatureChanged: (feature: GeoJSONStoreFeatures) => void;
   onFeaturesRemoved: () => void;
+  /**
+   * Features were added or removed, or ones with Z moved or lost it: what counts, or depends on
+   * their Z (the export button, polygon extrusion), may have changed. Once a frame at most.
+   */
+  onShapesChange: () => void;
   /** Fired for clicks in 'select' state, with the feature under the pointer if any. */
   onMapClicked: (
     feature: GeoJSONStoreFeatures | undefined,
@@ -134,6 +139,17 @@ export class DrawController {
     this.terraDraw.on("finish", (id, { action }) =>
       this.onFinish(id, action === "draw"),
     );
+    this.terraDraw.on("change", (ids, type) => {
+      // Edits matter only to features with Z, which follow them while extruded.
+      const relevant =
+        type === "create" ||
+        type === "delete" ||
+        (type === "update" &&
+          ids.some(
+            (id) => this.terraDraw.getSnapshotFeature(id)?.properties.zRange,
+          ));
+      if (relevant) this.scheduleShapesChange();
+    });
     this.terraDraw.on("history", () => {
       this.callbacks.onHistoryChange(
         this.terraDraw.canUndo(),
@@ -211,6 +227,29 @@ export class DrawController {
     return exportCollection(this.terraDraw.getSnapshot());
   }
 
+  private shapesChangeScheduled = false;
+
+  /** Features come and go in thousands at once, from files: reported once a frame at most. */
+  private scheduleShapesChange(): void {
+    if (this.shapesChangeScheduled) return;
+    this.shapesChangeScheduled = true;
+    requestAnimationFrame(() => {
+      this.shapesChangeScheduled = false;
+      this.callbacks.onShapesChange();
+    });
+  }
+
+  /** The features drawn: selection handles and midpoints, which live in the store too, aside. */
+  shapes(): GeoJSONStoreFeatures[] {
+    return this.terraDraw
+      .getSnapshot()
+      .filter((f) => !f.properties.selectionPoint && !f.properties.midPoint);
+  }
+
+  hasFeatures(): boolean {
+    return this.shapes().length > 0;
+  }
+
   /** Add externally-sourced features (from pasted WKT/GeoJSON) to the store. */
   addFeatures(features: Feature[]): {
     added: GeoJSONStoreFeatures[];
@@ -235,8 +274,13 @@ export class DrawController {
 
   private onFinish(id: FeatureId, drawn: boolean): void {
     // A user edit makes the feature the source of truth, so it stops reporting the geometry it was pasted with.
+    // Its Z goes with it: the new vertices have none, and the old ones may have moved.
     if (this.terraDraw.getSnapshotFeature(id)?.properties.sourceGeometry) {
-      this.terraDraw.updateFeatureProperties(id, { sourceGeometry: undefined });
+      this.terraDraw.updateFeatureProperties(id, {
+        sourceGeometry: undefined,
+        zRange: undefined,
+      });
+      this.scheduleShapesChange();
     }
     if (drawn) {
       this.setState("select");
@@ -296,9 +340,12 @@ function toPosition([lng, lat]: Position): Position {
 }
 
 /** Terra Draw only stores Point/LineString/hole-free Polygon geometries; reduce anything else to those. */
-function toDrawableGeometries(
-  geometry: Geometry,
-): { mode: string; geometry: GeoJSONStoreGeometries }[] {
+function toDrawableGeometries(geometry: Geometry): {
+  mode: string;
+  geometry: GeoJSONStoreGeometries;
+  /** The part's own Z range, which its 2D geometry can't hold. */
+  z: [number, number] | null;
+}[] {
   switch (geometry.type) {
     case "Point":
       return [
@@ -308,6 +355,7 @@ function toDrawableGeometries(
             type: "Point",
             coordinates: toPosition(geometry.coordinates),
           },
+          z: zRange(geometry),
         },
       ];
     case "LineString":
@@ -318,6 +366,7 @@ function toDrawableGeometries(
             type: "LineString",
             coordinates: geometry.coordinates.map(toPosition),
           },
+          z: zRange(geometry),
         },
       ];
     case "Polygon":
@@ -328,6 +377,7 @@ function toDrawableGeometries(
             type: "Polygon",
             coordinates: [geometry.coordinates[0].map(toPosition)],
           },
+          z: zRange(geometry),
         },
       ];
     case "MultiPoint":
@@ -360,14 +410,17 @@ function toStoreFeatures({
     return []; // Malformed coordinates.
   }
 
+  // The map holds longitude and latitude alone: Z, like holes and multiple parts, lives on in
+  // the geometry as given.
   const isSimplified =
     drawable.length > 1 ||
-    (geometry.type === "Polygon" && geometry.coordinates.length > 1);
+    (geometry.type === "Polygon" && geometry.coordinates.length > 1) ||
+    zRange(geometry) !== null;
   const hasProperties = properties && Object.keys(properties).length > 0;
   const now = Date.now();
   const sourceId = crypto.randomUUID();
 
-  return drawable.map(({ mode, geometry: geom }) => ({
+  return drawable.map(({ mode, geometry: geom, z }) => ({
     id: crypto.randomUUID(),
     type: "Feature",
     geometry: geom,
@@ -380,6 +433,8 @@ function toStoreFeatures({
         sourceGeometry: geometry as unknown as JSONObject,
       }),
       ...(drawable.length > 1 && { sourceId }),
+      // Each part's own, for extruding it: a multipolygon's may differ.
+      ...(z && { zRange: z }),
     },
   }));
 }
@@ -452,13 +507,21 @@ export function featureProperties(
   );
 }
 
-/** Measurements, then whatever properties the feature was pasted with. */
+/** Z as shown: one value if all agree, else the range. Units are the data's own, usually metres. */
+export function formatZRange([min, max]: [number, number]): string {
+  const round = (z: number) => String(Number(z.toFixed(3)));
+  return min === max ? round(min) : `${round(min)} – ${round(max)}`;
+}
+
+/** Measurements, Z where the geometry has it, then whatever properties the feature was pasted with. */
 export function featureDetails(
   feature: GeoJSONStoreFeatures,
   units: Units,
 ): DetailRow[] {
+  const z = zRange(featureGeometry(feature));
   const entries = Object.entries({
     ...featureMeasurements(feature, units),
+    ...(z && { Z: formatZRange(z) }),
     ...featureProperties(feature),
   });
   return entries.map(([label, value]) => {

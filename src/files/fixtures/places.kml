@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document id="root_doc">
+<Schema name="places" id="places">
+	<SimpleField name="rank" type="int"></SimpleField>
+</Schema>
+<Folder><name>places</name>
+  <Placemark>
+	<name>Puerta del Sol</name>
+	<ExtendedData><SchemaData schemaUrl="#places">
+		<SimpleData name="rank">1</SimpleData>
+	</SchemaData></ExtendedData>
+      <Point><coordinates>-3.7038,40.4168</coordinates></Point>
+  </Placemark>
+  <Placemark>
+	<name>Retiro</name>
+	<ExtendedData><SchemaData schemaUrl="#places">
+		<SimpleData name="rank">2</SimpleData>
+	</SchemaData></ExtendedData>
+      <Point><coordinates>-3.6823,40.4153</coordinates></Point>
+  </Placemark>
+  <Placemark>
+	<name>Bernabéu</name>
+	<ExtendedData><SchemaData schemaUrl="#places">
+		<SimpleData name="rank">3</SimpleData>
+	</SchemaData></ExtendedData>
+      <Point><coordinates>-3.6883,40.4531</coordinates></Point>
+  </Placemark>
+</Folder>
+</Document></kml>

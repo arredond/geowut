@@ -27,7 +27,15 @@ to "no, better make it GeoJSON", all the way to "gimme a level 14 tile in Manhat
 ## How to use it
 
 - Drawing features: the toolbar on the left-hand side lets you draw a variety of shapes or measure on the map.
-- Adding data: use the "Add data" button (or simply copy/paste on the map) to create features from a number of formats, such as GeoJSON, WKT, GDAL bboxes, lat/long pairs, H3 IDs, etc. Anything _geowut_ can export, it can import as well.
+- Adding data: use the "Add data" button (or simply copy/paste on the map) to create features from a number of formats, such as GeoJSON, WKT and WKB, GDAL bboxes, lat/long pairs in decimal or DMS, map links, H3 IDs, geohashes, plus codes, encoded polylines, etc. Anything _geowut_ can export, it can import as well.
+- Adding files: open them from "Add data", or drop or paste them anywhere on the map. GeoJSON (and GeoJSON lines), CSV
+  (with lat/lon columns, or a WKT/WKB/GeoJSON geometry column: the dialog lists the column names it reads), KML, KMZ,
+  GPX, Shapefiles (zipped, or their parts together), GeoParquet, FlatGeobuf and GeoPackage. Files are read in your
+  browser and never uploaded; the code for each format only loads when you first open one.
+- Projections: data in other coordinate systems is reprojected to WGS84 when it says which, be it an EWKT/EWKB SRID, an
+  Esri JSON spatial reference, a `.prj` or a file's own metadata. Any EPSG code for a 2D system works.
+- Z values: kept from every format, shown in a feature's details and kept in exports. Tilt the map (click the compass, or
+  Ctrl-drag) to see polygons with Z extruded to their highest Z; MapLibre can't raise lines or points.
 - Grid layers: visualize the most common geospatial indexes (H3, S2, A5, XYZ tiles) at any zoom level. Clicking on the label shows you all the properties you need, including IDs, parents and children.
 - Search: powered by [Photon](https://photon.komoot.io/) and [Nominatim](https://nominatim.org/). Click the "+" button next to a result to add the feature to the map (simplified to avoid crashing your browser).
 - Settings: light/dark/auto mode, basemap picker, etc.
@@ -40,7 +48,15 @@ _geowut_ is a simple frontend-only static app ([Vite](https://vite.dev/) + TypeS
 - [OpenFreeMap](https://openfreemap.org/) for basemap tiles and styles.
 - [Photon](https://photon.komoot.io/), [Nominatim](https://nominatim.org/) and [maplibre-gl-geocoder](https://github.com/maplibre/maplibre-gl-geocoder) for place search. _geowut_ currently uses their public APIs -- be nice!
 - [Terra Draw](https://terradraw.io/) for drawing and editing geometries.
-- [Terraformer](https://github.com/terraformer-js/terraformer) for WKT and Esri JSON parsing.
+- [betterknown](https://github.com/placemark/betterknown) for WKT and EWKT.
+- [proj4js](https://github.com/proj4js/proj4js) for reprojection, with EPSG definitions from
+  [epsg-index](https://github.com/derhuerst/epsg-index).
+- [Papa Parse](https://www.papaparse.com/) for CSV, [togeojson](https://github.com/placemark/togeojson) for KML and GPX,
+  [shpjs](https://github.com/calvinmetcalf/shapefile-js) for Shapefiles, [hyparquet](https://github.com/hyparam/hyparquet)
+  for GeoParquet, [flatgeobuf](https://github.com/flatgeobuf/flatgeobuf) for FlatGeobuf and
+  [sql.js](https://github.com/sql-js/sql.js) for GeoPackage, plus [fflate](https://github.com/101arrowz/fflate) and
+  [fzstd](https://github.com/101arrowz/fzstd) for zips and compression.
+- [Terraformer](https://github.com/terraformer-js/terraformer) for Esri JSON parsing.
 - [GeographicLib](https://geographiclib.sourceforge.io/) for measurements on the WGS84 ellipsoid.
 - [h3-js](https://github.com/uber/h3-js) for H3 hexagons.
 - [s2js](https://github.com/missinglink/s2js) for S2 cells.
@@ -69,7 +85,9 @@ npm run preview  # serve the production build locally
 npm test         # unit tests
 ```
 
-Tests run on [Vitest](https://vitest.dev/) with [jsdom](https://github.com/jsdom/jsdom). [Prettier](https://prettier.io/), [oxlint](https://oxc.rs/) and `tsc` run as [pre-commit](https://pre-commit.com/) hooks (`pre-commit install` to set them up).
+Tests run on [Vitest](https://vitest.dev/) with [jsdom](https://github.com/jsdom/jsdom). The file readers are tested
+against small files written by GDAL (through DuckDB's spatial extension), in `src/files/fixtures/`; `make-fixtures.sql`
+there regenerates them. [Prettier](https://prettier.io/), [oxlint](https://oxc.rs/) and `tsc` run as [pre-commit](https://pre-commit.com/) hooks (`pre-commit install` to set them up).
 
 ## Massive props to
 
@@ -86,7 +104,12 @@ The maintainers of all the aforementioned sites, plus:
   MapLibre for [maplibre-gl-geocoder](https://github.com/maplibre/maplibre-gl-geocoder).
 - [James Milner](https://github.com/JamesLMilner) for [Terra Draw](https://github.com/JamesLMilner/terra-draw) and its
   MapLibre adapter.
-- The [Terraformer](https://github.com/terraformer-js/terraformer) maintainers for `@terraformer/wkt` and `@terraformer/arcgis`.
+- [Tom MacWright](https://github.com/tmcw) and [Placemark](https://www.placemark.io/) for betterknown and togeojson.
+- The [proj4js](https://github.com/proj4js/proj4js) maintainers, and [Jannis R](https://github.com/derhuerst) for epsg-index.
+- [Calvin Metcalf](https://github.com/calvinmetcalf) for shpjs, [Hyperparam](https://github.com/hyparam) for hyparquet,
+  [Björn Harrtell](https://github.com/bjornharrtell) and contributors for FlatGeobuf, the sql.js maintainers, and
+  [101arrowz](https://github.com/101arrowz) for fflate and fzstd.
+- The [Terraformer](https://github.com/terraformer-js/terraformer) maintainers for `@terraformer/arcgis`.
 - [Uber](https://github.com/uber/h3-js) for the H3 geographic grid system and JS library.
 - [Charles Karney](https://geographiclib.sourceforge.io/) for GeographicLib.
 - [Camptocamp](https://github.com/camptocamp) for [ogc-client](https://github.com/camptocamp/ogc-client), which reads

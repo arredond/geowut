@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { arcgisToFeatures, isArcGIS, UnsupportedDataError } from "./arcgis";
+import { arcgisToFeatures, isArcGIS } from "./arcgis";
+import { UnsupportedDataError } from "./errors";
+import { withProjections } from "./projection";
+
+const UTM_30N_WKT =
+  'PROJCS["ETRS_1989_UTM_Zone_30N",GEOGCS["GCS_ETRS_1989",DATUM["D_ETRS_1989",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["False_Easting",500000.0],PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",-3.0],PARAMETER["Scale_Factor",0.9996],PARAMETER["Latitude_Of_Origin",0.0],UNIT["Meter",1.0]]';
 
 const feature = (geometry: object, properties: object | null = null) => ({
   type: "Feature",
@@ -152,11 +157,28 @@ describe("arcgisToFeatures", () => {
     ).toHaveLength(2);
   });
 
+  it("reprojects other spatial references, by wkid or WKT", async () => {
+    for (const spatialReference of [{ wkid: 25830 }, { wkt: UTM_30N_WKT }]) {
+      const [{ geometry }] = await withProjections(() =>
+        arcgisToFeatures({ x: 440290.458, y: 4474257.382, spatialReference }),
+      );
+      const [lng, lat] = (geometry as GeoJSON.Point).coordinates;
+      expect(lng).toBeCloseTo(-3.7038, 4);
+      expect(lat).toBeCloseTo(40.4168, 4);
+    }
+  });
+
   it.each([
-    [{ x: 500000, y: 4470000, spatialReference: { wkid: 25830 } }, /25830/],
-    [{ x: 1, y: 2, spatialReference: { wkt: 'PROJCS["Custom"]' } }, /WKT/],
-  ])("refuses other spatial references", (json, message) => {
-    expect(() => arcgisToFeatures(json)).toThrow(UnsupportedDataError);
-    expect(() => arcgisToFeatures(json)).toThrow(message);
+    [{ x: 1, y: 2, spatialReference: { wkid: 102999 } }, /102999/],
+    [
+      { x: 1, y: 2, spatialReference: { wkt: 'PROJCS["Custom"]' } },
+      /can't read/,
+    ],
+  ])("refuses spatial references it can't read", async (json, message) => {
+    const read = withProjections(() => arcgisToFeatures(json));
+    await expect(read).rejects.toThrow(UnsupportedDataError);
+    await expect(withProjections(() => arcgisToFeatures(json))).rejects.toThrow(
+      message,
+    );
   });
 });

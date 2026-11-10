@@ -12,6 +12,7 @@ import {
   TOOLS,
 } from "./draw";
 import type { DrawCallbacks } from "./draw";
+import { extrusionFeatures } from "./extrusion";
 
 const terraDrawInstance = vi.hoisted(() => ({ current: null as unknown }));
 const selectModeOptions = vi.hoisted(() => ({ current: null as any }));
@@ -131,6 +132,7 @@ beforeEach(() => {
     onHistoryChange: vi.fn(),
     onFeatureChanged: vi.fn(),
     onFeaturesRemoved: vi.fn(),
+    onShapesChange: vi.fn(),
     onMapClicked: vi.fn(),
     onMeasurementChange: vi.fn(),
   };
@@ -397,6 +399,76 @@ describe("history", () => {
   it("reports what can be undone", () => {
     terraDraw.listeners.history();
     expect(callbacks.onHistoryChange).toHaveBeenCalledWith(true, false);
+  });
+
+  const nextFrame = () =>
+    new Promise((resolve) => requestAnimationFrame(resolve));
+
+  it("reports features coming and going, once a frame for many changes", async () => {
+    for (let i = 0; i < 3; i++) terraDraw.listeners.change(["a"], "create");
+    terraDraw.listeners.change(["b"], "delete");
+    await nextFrame();
+    expect(callbacks.onShapesChange).toHaveBeenCalledOnce();
+  });
+
+  it("reports edits only of features with Z, which follow them while extruded", async () => {
+    const [flat, withZ] = controller.addFeatures([
+      feature({ type: "Point", coordinates: [1, 2] }),
+      feature({ type: "Point", coordinates: [1, 2, 650] }),
+    ]).added;
+    terraDraw.listeners.change([flat.id], "update");
+    await nextFrame();
+    expect(callbacks.onShapesChange).not.toHaveBeenCalled();
+    terraDraw.listeners.change([withZ.id], "update");
+    await nextFrame();
+    expect(callbacks.onShapesChange).toHaveBeenCalledOnce();
+  });
+
+  it("drops the geometry as given, Z and all, once edited, saying so", async () => {
+    const [added] = controller.addFeatures([
+      feature({ type: "Point", coordinates: [1, 2, 650] }),
+    ]).added;
+    expect(added.properties.sourceGeometry).toEqual({
+      type: "Point",
+      coordinates: [1, 2, 650],
+    });
+    terraDraw.listeners.finish(added.id, { action: "edit" });
+    expect(terraDraw.updateFeatureProperties).toHaveBeenCalledWith(added.id, {
+      sourceGeometry: undefined,
+      zRange: undefined,
+    });
+    await nextFrame();
+    expect(callbacks.onShapesChange).toHaveBeenCalled();
+  });
+
+  it("keeps each part's own Z range, and extrudes each part to its own height", () => {
+    const square = (z: number) => [
+      [
+        [0, 0, z],
+        [1, 0, z],
+        [1, 1, z],
+        [0, 0, z],
+      ],
+    ];
+    const { added } = controller.addFeatures([
+      feature({
+        type: "MultiPolygon",
+        coordinates: [square(120), square(300)],
+      }),
+    ]);
+    expect(added.map((part) => part.properties.zRange)).toEqual([
+      [120, 120],
+      [300, 300],
+    ]);
+    expect(extrusionFeatures(added).map((f) => f.properties?.height)).toEqual([
+      120, 300,
+    ]);
+  });
+
+  it("knows whether there are features", () => {
+    expect(controller.hasFeatures()).toBe(false);
+    controller.addFeatures([feature({ type: "Point", coordinates: [1, 2] })]);
+    expect(controller.hasFeatures()).toBe(true);
   });
 
   it.each(["undo", "redo"] as const)(
@@ -738,11 +810,51 @@ describe("featureDetails", () => {
     });
     expect(featureDetails(line, "imperial")[0].label).toBe("Length (mi)");
   });
+
+  it("shows Z after the measurements, a range where it varies", () => {
+    const [line] = controller.addFeatures([
+      feature(
+        {
+          type: "LineString",
+          coordinates: [
+            [0, 0, 650],
+            [1, 0, 670.25],
+          ],
+        },
+        { name: "track" },
+      ),
+    ]).added;
+    expect(featureDetails(line, "metric").map((r) => r.label)).toEqual([
+      "Length (km)",
+      "Z",
+      "name",
+    ]);
+    expect(featureDetails(line, "metric")[1].value).toBe("650 – 670.25");
+    const [point] = controller.addFeatures([
+      feature({ type: "Point", coordinates: [1, 2, 650] }),
+    ]).added;
+    expect(featureDetails(point, "metric")).toContainEqual({
+      label: "Z",
+      value: "650",
+    });
+  });
 });
 
 describe("exportCollection", () => {
   const add = (...features: Feature[]) =>
     controller.addFeatures(features).added;
+
+  it("keeps Z, which the map itself doesn't hold", () => {
+    const line = {
+      type: "LineString" as const,
+      coordinates: [
+        [0, 0, 650],
+        [1, 0, 670],
+      ],
+    };
+    add(feature(line));
+    expect(controller.exportFeatures().features[0].geometry).toEqual(line);
+  });
 
   it("gives pasted features back whole, with their properties", () => {
     const multi: Geometry = {

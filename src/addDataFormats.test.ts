@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildFormatsHelp } from "./addDataFormats";
-import { parseFeatures } from "./addDataModal";
+import { FILE_FORMATS } from "./files";
+import { parseFeatures } from "./formats/text";
 
 describe("buildFormatsHelp", () => {
   const help = buildFormatsHelp(() => {});
@@ -10,9 +11,7 @@ describe("buildFormatsHelp", () => {
 
   it("starts folded, behind a question", () => {
     expect(help.open).toBe(false);
-    expect(help.querySelector("summary")!.textContent).toBe(
-      "What can I paste?",
-    );
+    expect(help.querySelector("summary")!.textContent).toBe("What can I add?");
   });
 
   it("covers every kind of input, the prefixes and the caveats", () => {
@@ -20,16 +19,28 @@ describe("buildFormatsHelp", () => {
     expect(terms).toEqual([
       "GeoJSON",
       "WKT",
+      "WKB",
       "Esri JSON",
+      "Encoded polyline",
       "Bounding box",
       "Lat, lng",
+      "Degrees, minutes, seconds",
+      "Map links",
       "H3",
       "S2",
       "A5",
       "XYZ",
+      "Geohash",
+      "Plus code",
       "Prefixes",
+      ...FILE_FORMATS.map((f) => f.name),
+      "CSV columns",
     ]);
-    expect(help.textContent).toMatch(/h3:, s2:, a5: or xyz:/);
+    // The CSV column names it reads are spelled out.
+    expect(help.textContent).toMatch(
+      /the_geom.*latitude, lat, y.*longitude, lon/,
+    );
+    expect(help.textContent).toMatch(/h3:, s2:, a5:, xyz: or gh:/);
     expect(help.querySelectorAll("li").length).toBeGreaterThan(3);
   });
 

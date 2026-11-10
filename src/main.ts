@@ -13,6 +13,8 @@ import { FeaturePanel } from "./panel";
 import { FeaturePopup } from "./popup";
 import { Toolbar, historyShortcut, isTyping } from "./toolbar";
 import { AddDataModal } from "./addDataModal";
+import { enableFileDrop } from "./fileDrop";
+import { Extrusion } from "./extrusion";
 import type { AddResult } from "./addDataModal";
 import type { Feature } from "geojson";
 import type { GeoJSONStoreFeatures } from "terra-draw";
@@ -49,6 +51,7 @@ const matchBasemap = (basemap: Basemap) => {
 matchBasemap(settings.get().basemap);
 
 const coveragePreview = new CoveragePreview(map);
+const extrusion = new Extrusion(map);
 
 const featurePanel = new FeaturePanel(
   app,
@@ -94,6 +97,11 @@ const draw = new DrawController(map, {
     if (state !== "select") featurePopup.hide();
   },
   onHistoryChange: (canUndo, canRedo) => toolbar.setHistory(canUndo, canRedo),
+  onShapesChange: () => {
+    const shapes = draw.shapes();
+    toolbar.setHasFeatures(shapes.length > 0);
+    extrusion.update(shapes);
+  },
   onMeasurementChange: (measurement) => toolbar.setMeasurement(measurement),
   onFeatureChanged: showFeature,
   onFeaturesRemoved: () => {
@@ -128,12 +136,15 @@ const toolbar = new Toolbar(
     deleteAll: () => draw.deleteAll(),
     undo: () => draw.undo(),
     redo: () => draw.redo(),
-    exportAll: () =>
+    exportAll: () => {
+      // The button is off on an empty map, but an empty file is never wanted either way.
+      if (!draw.hasFeatures()) return;
       downloadText(
         datedFilename("geojson"),
         JSON.stringify(draw.exportFeatures(), null, 2),
         "application/geo+json",
-      ),
+      );
+    },
   },
   units(),
 );
@@ -176,14 +187,23 @@ function addToMap(features: Feature[]): AddResult {
 
 const addDataModal = new AddDataModal(app, addToMap);
 
-// Pasting anywhere but a text field adds the data, as "Add data" would.
+// Pasting anywhere but a text field adds the data, as "Add data" would: files copied in a
+// file manager too.
 document.addEventListener("paste", (e) => {
   if (isTyping(e) || !addDataModal.isHidden()) return;
+  const files = [...(e.clipboardData?.files ?? [])];
+  if (files.length > 0) {
+    e.preventDefault();
+    void addDataModal.addFiles(files);
+    return;
+  }
   const text = e.clipboardData?.getData("text/plain");
   if (!text?.trim()) return;
   e.preventDefault();
-  addDataModal.addPasted(text);
+  void addDataModal.addPasted(text);
 });
+
+enableFileDrop(app, (files) => void addDataModal.addFiles(files));
 
 document.addEventListener("keydown", (e) => {
   const history = historyShortcut(e);
@@ -201,6 +221,7 @@ document.addEventListener("keydown", (e) => {
 map.on("load", () => {
   for (const layer of gridLayers) layer.addToMap();
   coveragePreview.addToMap();
+  extrusion.addToMap();
 
   const gridControl = new GridControl(app, gridLayers, () => gridInfo.show());
   gridControl.setZoom(map.getZoom());

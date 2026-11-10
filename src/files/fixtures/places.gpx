@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="GeoWut fixtures" xmlns="http://www.topografix.com/GPX/1/1">
+  <wpt lat="40.4168" lon="-3.7038"><name>Puerta del Sol</name></wpt>
+  <wpt lat="40.4153" lon="-3.6823"><name>Retiro</name></wpt>
+  <trk>
+    <name>Sol to Retiro</name>
+    <trkseg>
+      <trkpt lat="40.4168" lon="-3.7038"><ele>650</ele></trkpt>
+      <trkpt lat="40.4160" lon="-3.6930"><ele>660</ele></trkpt>
+      <trkpt lat="40.4153" lon="-3.6823"><ele>670</ele></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

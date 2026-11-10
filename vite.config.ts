@@ -1,5 +1,6 @@
 import type { Plugin } from "vite";
-import { thirdPartyLicenses } from "./build/thirdPartyLicenses";
+import { epsgTable } from "./build/epsgTable.ts";
+import { thirdPartyLicenses } from "./build/thirdPartyLicenses.ts";
 import { defineConfig } from "vitest/config";
 
 const OL_TILEGRID_STUB = "\0ogc-client-ol-tilegrid";
@@ -26,7 +27,7 @@ const withoutOgcClientOpenLayers: Plugin = {
 };
 
 export default defineConfig({
-  plugins: [withoutOgcClientOpenLayers, thirdPartyLicenses()],
+  plugins: [withoutOgcClientOpenLayers, epsgTable(), thirdPartyLicenses()],
   // maplibre-gl locates its worker script as a sibling file next to its own
   // module URL at runtime. Vite's dev-time dependency pre-bundling moves it
   // into node_modules/.vite/deps without that sibling, breaking the lookup -

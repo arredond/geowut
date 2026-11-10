@@ -13,12 +13,20 @@ interface PackageLicense {
 const NODE_MODULES = "/node_modules/";
 
 /**
+ * Module meta naming the package folder a generated module's content comes from, for modules
+ * that live outside node_modules but bundle a package's data all the same.
+ */
+export const SOURCE_PACKAGE_META = "thirdPartyPackageDir";
+
+/**
  * License texts for packages that declare a license but ship no text of it, copied from their
  * repositories: Terraformer's (terraformer-js/terraformer) and Terra Draw's (JamesLMilner/terra-draw).
+ * zstd-wasm's has none to copy: its file quotes its README, with the licenses it names.
  */
 const VENDORED: [RegExp, string][] = [
   [/^@terraformer\//, "terraformer.txt"],
   [/^terra-draw(-|$)/, "terra-draw.txt"],
+  [/^@bokuweb\/zstd-wasm$/, "zstd-wasm.txt"],
 ];
 
 function vendoredLicense(name: string): string | undefined {
@@ -75,6 +83,8 @@ function readPackage(dir: string): PackageLicense {
       // GitHub shorthand, as in "JamesLMilner/terra-draw".
       ?.replace(/^(github:)?([\w.-]+\/[\w.-]+)$/, "https://github.com/$2")
       .replace(/^git\+/, "")
+      // SSH remotes, as in "ssh://git@github.com/x/y" or "git@github.com:x/y".
+      .replace(/^(?:ssh:\/\/)?git@([^:/]+)[:/]/, "https://$1/")
       .replace(/^git:\/\//, "https://")
       .replace(/\.git$/, ""),
     text: licenseFile
@@ -145,7 +155,10 @@ export function thirdPartyLicenses(
       for (const output of Object.values(bundle)) {
         if (output.type !== "chunk") continue;
         for (const id of output.moduleIds) {
-          const dir = packageDir(id);
+          const dir =
+            packageDir(id) ??
+            (this.getModuleInfo(id)?.meta[SOURCE_PACKAGE_META] as
+              string | undefined);
           if (dir) dirs.add(dir);
         }
       }

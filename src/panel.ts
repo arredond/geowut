@@ -1,4 +1,4 @@
-import { geojsonToWKT } from "@terraformer/wkt";
+import { toWkt } from "./formats/wkt";
 import type { Feature, Geometry } from "geojson";
 import { geometryBbox, geometryCenter, bboxToString } from "./geometry";
 import {
@@ -307,7 +307,7 @@ export class FeaturePanel {
 
     const formats: CopyItem[] = [
       { label: "GeoJSON", value: () => JSON.stringify(geometry) },
-      { label: "Well Known Text (WKT)", value: () => geojsonToWKT(geometry) },
+      { label: "Well Known Text (WKT)", value: () => toWkt(geometry) },
       {
         label: "Bounding box",
         value: () => bboxToString(geometryBbox(geometry)),

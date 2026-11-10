@@ -1,3 +1,6 @@
+import { MAX_FEATURES, MAX_VERTICES } from "./limits";
+import { FILE_FORMATS } from "./files";
+import { CSV_COLUMNS } from "./files/csvColumns";
 import { ICONS } from "./icons";
 
 interface Format {
@@ -21,21 +24,35 @@ const SECTIONS: Section[] = [
       {
         name: "GeoJSON",
         description:
-          "A geometry, a Feature or a FeatureCollection. Properties are kept.",
+          "A geometry, a Feature or a FeatureCollection, or one per line (GeoJSON lines, as GDAL's GeoJSONSeq writes). Properties are kept.",
         examples: ['{"type":"Point","coordinates":[-3.7038,40.4168]}'],
       },
       {
         name: "WKT",
-        description: "Any geometry type, GeometryCollection included.",
+        description:
+          "Any geometry type, GeometryCollection included. PostGIS's EWKT too, its SRID first.",
         examples: [
           "POLYGON ((-3.8 40.3, -3.5 40.3, -3.5 40.6, -3.8 40.6, -3.8 40.3))",
+          "SRID=4326;POINT(-3.7038 40.4168)",
         ],
+      },
+      {
+        name: "WKB",
+        description:
+          "Hex-encoded, as databases print geometries: WKB or PostGIS's EWKB, also led by \\x or 0x. One or many.",
+        examples: ["0101000020E6100000FE65F7E461A10DC0857CD0B359354440"],
       },
       {
         name: "Esri JSON",
         description:
           "Geometries, features or a whole ArcGIS REST query response (f=json), in WGS84 or Web Mercator.",
         examples: ['{"x":-3.7038,"y":40.4168}'],
+      },
+      {
+        name: "Encoded polyline",
+        description:
+          "A route as Google's, OSRM's (precision 5) or Valhalla's (precision 6) APIs encode it.",
+        examples: ["_p~iF~ps|U_ulLnnqC_mqNvxq`@"],
       },
     ],
   },
@@ -57,10 +74,22 @@ const SECTIONS: Section[] = [
         description: "A point: latitude first, then a comma and longitude.",
         examples: ["40.4168, -3.7038"],
       },
+      {
+        name: "Degrees, minutes, seconds",
+        description:
+          "Also degrees and decimal minutes, or decimal degrees with ° or N, S, E, W. With hemisphere letters, either order will do.",
+        examples: [`40°25'0.6"N 3°42'13.7"W`, "40° 25.01' N, 3° 42.23' W"],
+      },
+      {
+        name: "Map links",
+        description:
+          "Google Maps, OpenStreetMap, Bing, Apple Maps and most web maps' #zoom/lat/lng links, or geo: URIs. A marked place wins over the map's centre.",
+        examples: ["https://www.openstreetmap.org/#map=15/40.4168/-3.7038"],
+      },
     ],
   },
   {
-    title: "Cell IDs",
+    title: "Cells and codes",
     note: "Alone or in lists, split by commas, spaces or lines, as the side panel copies them.",
     formats: [
       {
@@ -86,26 +115,56 @@ const SECTIONS: Section[] = [
         examples: ["12/2005/1544", "0313"],
       },
       {
+        name: "Geohash",
+        description: "Its cell, from 2 to 12 characters (or 1 with gh:).",
+        examples: ["ezjmgtwu"],
+      },
+      {
+        name: "Plus code",
+        description:
+          "Open Location Code, as Google Maps shows: a full one, with 8 characters before the +.",
+        examples: ["8CGRC78W+PF"],
+      },
+      {
         name: "Prefixes",
         description:
-          "Some IDs are valid in more than one grid. Start one with h3:, s2:, a5: or xyz: to say which.",
-        examples: ["a5:4c5a2698a737e82c"],
+          "Some IDs are valid in more than one grid. Start one with h3:, s2:, a5:, xyz: or gh: to say which, and a polyline with polyline6: for precision 6.",
+        examples: ["a5:4c5a2698a737e82c", "gh:0d4283d"],
+      },
+    ],
+  },
+  {
+    title: "Files",
+    note: "Open them, drop them anywhere or paste them. They're read in your browser and never uploaded.",
+    formats: [
+      ...FILE_FORMATS.map(({ name, extensions }) => ({
+        name,
+        description: extensions.map((ext) => `.${ext}`).join(", "),
+      })),
+      {
+        name: "CSV columns",
+        description: `A geometry column, holding WKT, EWKT, WKB, EWKB or GeoJSON: ${CSV_COLUMNS.geometry.join(", ")}. Or latitude (${CSV_COLUMNS.latitude.join(", ")}) and longitude (${CSV_COLUMNS.longitude.join(", ")}) ones. Names are matched ignoring case, the first listed winning, and the other columns become properties. Commas, semicolons and tabs all separate.`,
       },
     ],
   },
 ];
 
 const CAVEATS = [
-  "Coordinates are longitude and latitude in degrees (WGS84). Projected ones, in metres, aren't converted.",
-  "Esri JSON in other spatial references is refused rather than drawn in the wrong place.",
-  "An ID that fits several grids is read as the likeliest: S2 over A5 where nothing tells them apart. A list is read in the grid that fits all of it. A prefix settles it either way.",
+  "Data in other coordinate systems is reprojected where it says which: EWKT and EWKB SRIDs, Esri JSON's spatial reference, a Shapefile's .prj, and GeoParquet, FlatGeobuf and GeoPackage metadata. Any EPSG code for a 2D system will do.",
+  "Where nothing says, coordinates are taken for longitude and latitude (WGS84): pasted text, CSV, and WKB or Shapefiles without an SRID or .prj.",
+  `Up to ${MAX_FEATURES.toLocaleString("en")} features or ${MAX_VERTICES.toLocaleString("en")} vertices are added at once: past that the map slows to a crawl, so the rest is left out, saying so.`,
+  "M values (in WKT and WKB) are dropped, as GeoJSON has no place for them.",
+  "Z values are kept: a feature's details show them, and exports and copies keep them. Tilt the map (click the compass, or Ctrl-drag) to see polygons with Z raised to their highest, in metres. Editing a feature drops its Z.",
+  "An ID that fits several grids is read as the likeliest: S2 over A5 where nothing tells them apart, and any grid over a geohash. A list is read in the grid that fits all of it. A prefix settles it either way.",
+  "Short plus codes, with a place after them, can't be placed without that place.",
+  "A polyline that fits on the globe at precision 5 is read so: near the equator, one at precision 6 needs its prefix.",
   "A lone digit isn't taken for a quadkey (xyz:1 is), nor are TMS tile numbers, which count Y from the south.",
   "Bounding boxes can't cross the antimeridian.",
   "No need to open this dialog: pasting onto the map does the same.",
 ];
 
 /**
- * A folded "What can I paste?" section listing every input format, its caveats and the grid
+ * A folded "What can I add?" section listing every input format, its caveats and the grid
  * prefixes. Clicking an example hands it to onExample, to fill the text box.
  */
 export function buildFormatsHelp(
@@ -116,7 +175,7 @@ export function buildFormatsHelp(
 
   const summary = document.createElement("summary");
   summary.innerHTML = ICONS.info;
-  summary.append("What can I paste?");
+  summary.append("What can I add?");
   details.appendChild(summary);
 
   const body = document.createElement("div");

@@ -78,6 +78,7 @@ export class Toolbar {
   private units: Units;
   private undoButton: HTMLButtonElement;
   private redoButton: HTMLButtonElement;
+  private exportButton: HTMLButtonElement;
 
   constructor(container: HTMLElement, actions: ToolbarActions, units: Units) {
     this.units = units;
@@ -159,14 +160,14 @@ export class Toolbar {
 
     const exportDivider = document.createElement("div");
     exportDivider.className = "draw-divider";
-    root.append(
-      exportDivider,
-      iconButton(
-        ICONS.download,
-        "Export all features as GeoJSON",
-        actions.exportAll,
-      ),
+    this.exportButton = iconButton(
+      ICONS.download,
+      "Export all features as GeoJSON",
+      actions.exportAll,
     );
+    // Nothing to export until something is drawn or added.
+    this.setHasFeatures(false);
+    root.append(exportDivider, this.exportButton);
 
     container.appendChild(root);
   }
@@ -200,6 +201,13 @@ export class Toolbar {
         : MEASURE_HINTS[tool];
       readout.classList.toggle("hint", !measurement);
     }
+  }
+
+  setHasFeatures(hasFeatures: boolean): void {
+    this.exportButton.disabled = !hasFeatures;
+    this.exportButton.title = hasFeatures
+      ? "Export all features as GeoJSON"
+      : "Nothing to export yet: draw or add some features";
   }
 
   setHistory(canUndo: boolean, canRedo: boolean): void {
