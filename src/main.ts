@@ -17,6 +17,7 @@ import { enableFileDrop } from "./fileDrop";
 import { Extrusion } from "./extrusion";
 import type { AddResult } from "./addDataModal";
 import type { Feature } from "geojson";
+import type { LngLatLike, MapMouseEvent } from "maplibre-gl";
 import type { GeoJSONStoreFeatures } from "terra-draw";
 import { geometryBbox } from "./geometry";
 import { applyTheme, isDarkBasemap, SettingsStore } from "./settings";
@@ -81,6 +82,54 @@ for (const layer of gridLayers) {
 }
 
 const featurePopup = new FeaturePopup(map);
+
+/**
+ * Where a feature's popup points. Clicks on points and lines land a few pixels off them, and
+ * that gap grows as the map zooms in, so the popup snaps to the point, or the nearest spot on
+ * the line. Polygons are clicked inside, so there it's the click.
+ */
+function popupAnchor(
+  feature: GeoJSONStoreFeatures,
+  event: MapMouseEvent,
+): LngLatLike {
+  const { geometry } = feature;
+  if (geometry.type === "Point") {
+    const [lng, lat] = geometry.coordinates;
+    return [lng, lat];
+  }
+  if (geometry.type !== "LineString") return event.lngLat;
+
+  // Nearest on screen, as the click's buffer is measured.
+  const click = event.point;
+  const vertices = geometry.coordinates.map(([lng, lat]) =>
+    map.project([lng, lat]),
+  );
+  let nearest = vertices[0];
+  let nearestDistance = Infinity;
+  for (let i = 1; i < vertices.length; i++) {
+    const a = vertices[i - 1];
+    const ab = vertices[i].sub(a);
+    const lengthSq = ab.x * ab.x + ab.y * ab.y;
+    const t =
+      lengthSq === 0
+        ? 0
+        : Math.max(
+            0,
+            Math.min(
+              1,
+              ((click.x - a.x) * ab.x + (click.y - a.y) * ab.y) / lengthSq,
+            ),
+          );
+    const candidate = a.add(ab.mult(t));
+    const distance = candidate.dist(click);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearest = candidate;
+    }
+  }
+  return map.unproject(nearest);
+}
+
 const gridInfo = new GridInfoModal(app, gridLayers, units);
 
 function showFeature(feature: GeoJSONStoreFeatures): void {
@@ -119,7 +168,7 @@ const draw = new DrawController(map, {
     } else if (feature) {
       const id = feature.id!;
       showFeature(feature);
-      featurePopup.show(event.lngLat, {
+      featurePopup.show(popupAnchor(feature, event), {
         onEdit: () => draw.edit(id),
         onDelete: () => draw.delete(id),
       });

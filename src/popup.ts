@@ -1,5 +1,5 @@
 import { Popup } from "maplibre-gl";
-import type { LngLat, Map as MapLibreMap } from "maplibre-gl";
+import type { LngLatLike, Map as MapLibreMap } from "maplibre-gl";
 import { ICONS } from "./icons";
 
 export interface FeatureActions {
@@ -47,12 +47,14 @@ export class FeaturePopup {
     this.map = map;
   }
 
-  show(lngLat: LngLat, actions: FeatureActions): void {
+  show(lngLat: LngLatLike, actions: FeatureActions): void {
     this.actions = actions;
     // A new popup each time: the previous one closes itself on the very click that opens this one.
     this.popup = new Popup({
       maxWidth: "320px",
       closeButton: false,
+      // Clear of a point's dot, when it points at one.
+      offset: 10,
       className: "feature-popup",
     })
       .setLngLat(lngLat)
