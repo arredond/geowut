@@ -28,7 +28,7 @@ to "no, better make it GeoJSON", all the way to "gimme a level 14 tile in Manhat
 
 - Drawing features: the toolbar on the left-hand side lets you draw a variety of shapes or measure on the map.
 - Adding data: use the "Add data" button (or simply copy/paste on the map) to create features from a number of formats, such as GeoJSON, WKT, GDAL bboxes, lat/long pairs, H3 IDs, etc. Anything _geowut_ can export, it can import as well.
-- Grid layers: visualize the most common geospatial indexes (H3, S2, A5, quadkeys) at any zoom level. Clicking on the label shows you all the properties you need, including IDs, parents and children.
+- Grid layers: visualize the most common geospatial indexes (H3, S2, A5, XYZ tiles) at any zoom level. Clicking on the label shows you all the properties you need, including IDs, parents and children.
 - Search: powered by [Photon](https://photon.komoot.io/) and [Nominatim](https://nominatim.org/). Click the "+" button next to a result to add the feature to the map (simplified to avoid crashing your browser).
 - Settings: light/dark/auto mode, basemap picker, etc.
 

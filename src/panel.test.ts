@@ -48,7 +48,7 @@ describe("FeaturePanel", () => {
     document.body.replaceChildren();
     panel = new FeaturePanel(document.body, () => ({
       h3: 5,
-      quadkey: 8,
+      xyz: 8,
       s2: 9,
       a5: 8,
     }));
@@ -66,7 +66,7 @@ describe("FeaturePanel", () => {
       "Center (lng/lat)",
       "Center (lat/lng)",
       "H3 (res 5)",
-      "Quadkey (zoom 8)",
+      "XYZ (zoom 8)",
       "S2 (level 9)",
       "A5 (res 8)",
     ]);
@@ -148,7 +148,7 @@ describe("FeaturePanel", () => {
       document.body.replaceChildren();
       panel = new FeaturePanel(
         document.body,
-        () => ({ h3: 5, quadkey: 8, s2: 9, a5: 8 }),
+        () => ({ h3: 5, xyz: 8, s2: 9, a5: 8 }),
         () => units,
       );
       panel.show(polygon, { details });
@@ -179,7 +179,7 @@ describe("FeaturePanel", () => {
       onPreview = vi.fn();
       panel = new FeaturePanel(
         document.body,
-        () => ({ h3: 5, quadkey: 8, s2: 9, a5: 8 }),
+        () => ({ h3: 5, xyz: 8, s2: 9, a5: 8 }),
         () => "metric",
         onPreview,
       );
@@ -241,11 +241,11 @@ describe("FeaturePanel", () => {
     });
 
     describe("as grid levels change", () => {
-      let resolutions: { h3: number; quadkey: number; s2: number; a5: number };
+      let resolutions: { h3: number; xyz: number; s2: number; a5: number };
 
       beforeEach(() => {
         document.body.replaceChildren();
-        resolutions = { h3: 5, quadkey: 8, s2: 9, a5: 8 };
+        resolutions = { h3: 5, xyz: 8, s2: 9, a5: 8 };
         panel = new FeaturePanel(
           document.body,
           () => resolutions,
@@ -256,11 +256,11 @@ describe("FeaturePanel", () => {
 
       it("relabels the coverings", () => {
         panel.show(polygon, { key: "feature:a" });
-        resolutions = { h3: 6, quadkey: 9, s2: 10, a5: 9 };
+        resolutions = { h3: 6, xyz: 9, s2: 10, a5: 9 };
         panel.refresh();
         expect(labels().slice(-4)).toEqual([
           "H3 (res 6)",
-          "Quadkey (zoom 9)",
+          "XYZ (zoom 9)",
           "S2 (level 10)",
           "A5 (res 9)",
         ]);
@@ -323,7 +323,7 @@ describe("FeaturePanel", () => {
       };
       panel = new FeaturePanel(
         document.body,
-        () => ({ h3: 15, quadkey: 23, s2: 24, a5: 30 }),
+        () => ({ h3: 15, xyz: 23, s2: 24, a5: 30 }),
         () => "metric",
         onPreview,
       );
@@ -376,7 +376,7 @@ describe("FeaturePanel", () => {
     };
     panel = new FeaturePanel(document.body, () => ({
       h3: 15,
-      quadkey: 23,
+      xyz: 23,
       s2: 24,
       a5: 30,
     }));

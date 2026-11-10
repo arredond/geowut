@@ -4,7 +4,7 @@ import type { LineString, MultiPolygon, Point, Polygon } from "geojson";
 import {
   a5Coverage,
   h3Coverage,
-  quadkeyCoverage,
+  xyzCoverage,
   s2Coverage,
   TooManyCellsError,
 } from "./coverage";
@@ -114,16 +114,9 @@ describe("h3Coverage", () => {
   });
 });
 
-describe("quadkeyCoverage", () => {
-  /** Tile X/Y back from a quadkey, to check where tiles are. */
-  const tileXY = (key: string) =>
-    [...key].reduce(
-      ([x, y], digit) => [
-        x * 2 + (Number(digit) & 1),
-        y * 2 + (Number(digit) >> 1),
-      ],
-      [0, 0],
-    );
+describe("xyzCoverage", () => {
+  /** Tile X/Y from a Z/X/Y ID, to check where tiles are. */
+  const tileXY = (id: string) => id.split("/").slice(1).map(Number);
   const triangle: Polygon = {
     type: "Polygon",
     coordinates: [
@@ -136,17 +129,17 @@ describe("quadkeyCoverage", () => {
     ],
   };
 
-  it("gives quadkeys of the requested zoom", () => {
-    const keys = quadkeyCoverage(polygon, 12);
+  it("gives Z/X/Y tiles of the requested zoom", () => {
+    const keys = xyzCoverage(polygon, 12);
     expect(keys.length).toBeGreaterThan(0);
-    expect(keys.every((key) => key.length === 12)).toBe(true);
+    expect(keys.every((key) => /^12\/\d+\/\d+$/.test(key))).toBe(true);
   });
 
   it("finds the tile of a point", () => {
     expect(
-      quadkeyCoverage({ type: "Point", coordinates: [-3.7, 40.4] }, 12),
+      xyzCoverage({ type: "Point", coordinates: [-3.7, 40.4] }, 12),
     ).toEqual(
-      quadkeyCoverage(
+      xyzCoverage(
         { type: "Polygon", coordinates: [square(-3.7, 40.4, 1e-6)] },
         12,
       ),
@@ -154,8 +147,8 @@ describe("quadkeyCoverage", () => {
   });
 
   it("follows lines, tile to touching tile, instead of covering their bbox", () => {
-    const keys = quadkeyCoverage(diagonal, 12);
-    const bboxKeys = quadkeyCoverage(
+    const keys = xyzCoverage(diagonal, 12);
+    const bboxKeys = xyzCoverage(
       { type: "Polygon", coordinates: [square(-4, 40, 0.5)] },
       12,
     );
@@ -169,28 +162,28 @@ describe("quadkeyCoverage", () => {
   });
 
   it("leaves out the tiles of a triangle's bbox that the triangle misses", () => {
-    const keys = quadkeyCoverage(triangle, 10);
-    const bboxKeys = quadkeyCoverage(
+    const keys = xyzCoverage(triangle, 10);
+    const bboxKeys = xyzCoverage(
       { type: "Polygon", coordinates: [square(-4, 40, 0.5)] },
       10,
     );
     expect(keys.length).toBeLessThan(bboxKeys.length);
     // The north-east corner of the bbox is off the triangle; its south-west corner is on it.
     expect(keys).not.toContain(
-      quadkeyCoverage({ type: "Point", coordinates: [-3.51, 40.49] }, 10)[0],
+      xyzCoverage({ type: "Point", coordinates: [-3.51, 40.49] }, 10)[0],
     );
     expect(keys).toContain(
-      quadkeyCoverage({ type: "Point", coordinates: [-3.99, 40.01] }, 10)[0],
+      xyzCoverage({ type: "Point", coordinates: [-3.99, 40.01] }, 10)[0],
     );
   });
 
   it("fills the inside of a polygon, not just its outline", () => {
-    const keys = quadkeyCoverage(
+    const keys = xyzCoverage(
       { type: "Polygon", coordinates: [square(-4, 40, 1)] },
       12,
     );
     expect(keys).toContain(
-      quadkeyCoverage({ type: "Point", coordinates: [-3.5, 40.5] }, 12)[0],
+      xyzCoverage({ type: "Point", coordinates: [-3.5, 40.5] }, 12)[0],
     );
   });
 
@@ -199,12 +192,12 @@ describe("quadkeyCoverage", () => {
       type: "Polygon",
       coordinates: [square(-4, 40, 1), square(-3.8, 40.2, 0.6)],
     };
-    const keys = quadkeyCoverage(withHole, 12);
+    const keys = xyzCoverage(withHole, 12);
     expect(keys).not.toContain(
-      quadkeyCoverage({ type: "Point", coordinates: [-3.5, 40.5] }, 12)[0],
+      xyzCoverage({ type: "Point", coordinates: [-3.5, 40.5] }, 12)[0],
     );
     expect(keys).toContain(
-      quadkeyCoverage({ type: "Point", coordinates: [-3.9, 40.5] }, 12)[0],
+      xyzCoverage({ type: "Point", coordinates: [-3.9, 40.5] }, 12)[0],
     );
   });
 
@@ -213,8 +206,8 @@ describe("quadkeyCoverage", () => {
       type: "Polygon",
       coordinates: [square(-3.7, 40.4, 0.001)],
     };
-    expect(quadkeyCoverage(tiny, 8)).toEqual(
-      quadkeyCoverage({ type: "Point", coordinates: [-3.6995, 40.4005] }, 8),
+    expect(xyzCoverage(tiny, 8)).toEqual(
+      xyzCoverage({ type: "Point", coordinates: [-3.6995, 40.4005] }, 8),
     );
   });
 });
@@ -289,26 +282,26 @@ describe("a5Coverage", () => {
 describe("oversized coverings", () => {
   it("refuses them instead of hanging the page", () => {
     expect(() => h3Coverage(polygon, 15)).toThrow(TooManyCellsError);
-    expect(() => quadkeyCoverage(polygon, 23)).toThrow(TooManyCellsError);
+    expect(() => xyzCoverage(polygon, 23)).toThrow(TooManyCellsError);
     expect(() => s2Coverage(polygon, 24)).toThrow(TooManyCellsError);
     expect(() => a5Coverage(polygon, 30)).toThrow(TooManyCellsError);
   });
 
   it("judges lines by their length, not their bbox", () => {
     expect(h3Coverage(longLine, 10).length).toBeGreaterThan(1000);
-    expect(quadkeyCoverage(longLine, 18).length).toBeGreaterThan(1000);
+    expect(xyzCoverage(longLine, 18).length).toBeGreaterThan(1000);
     expect(s2Coverage(longLine, 15).length).toBeGreaterThan(100);
   });
 
   it("still refuses lines too long for the resolution", () => {
     expect(() => h3Coverage(longLine, 14)).toThrow(TooManyCellsError);
-    expect(() => quadkeyCoverage(longLine, 23)).toThrow(TooManyCellsError);
+    expect(() => xyzCoverage(longLine, 23)).toThrow(TooManyCellsError);
   });
 
   it("still answers for points at the finest resolution", () => {
     const point: Point = { type: "Point", coordinates: [-3.7, 40.4] };
     expect(h3Coverage(point, 15)).toHaveLength(1);
-    expect(quadkeyCoverage(point, 23)).toHaveLength(1);
+    expect(xyzCoverage(point, 23)).toHaveLength(1);
     expect(s2Coverage(point, 24)).toHaveLength(1);
     expect(a5Coverage(point, 30)).toHaveLength(1);
   });

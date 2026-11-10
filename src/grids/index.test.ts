@@ -8,7 +8,7 @@ import {
   GRID_DEFINITIONS,
 } from ".";
 import type { GridCellFeature } from ".";
-import { cellPolygon, coverBbox } from "./quadkey";
+import { cellPolygon, coverBbox } from "./xyz";
 
 function fakeMap(zoom = 12) {
   const setData = vi.fn();
@@ -46,13 +46,13 @@ describe("GridLayer", () => {
 
   beforeEach(() => {
     map = fakeMap();
-    layer = new GridLayer(asMap(map), definition("quadkey"));
+    layer = new GridLayer(asMap(map), definition("xyz"));
   });
 
   it("starts hidden, in auto mode, at the resolution for the current zoom", () => {
     expect(layer.visible).toBe(false);
     expect(layer.auto).toBe(true);
-    expect(layer.resolution).toBe(13);
+    expect(layer.resolution).toBe(14);
   });
 
   it("draws cells when shown and clears them when hidden", () => {
@@ -71,7 +71,7 @@ describe("GridLayer", () => {
 
     layer.resetResolutionForZoom();
 
-    expect(onChange).toHaveBeenCalledWith(15);
+    expect(onChange).toHaveBeenCalledWith(16);
     expect(map.setData).not.toHaveBeenCalled();
   });
 
@@ -105,18 +105,18 @@ describe("GridLayer", () => {
 
     layer.setAuto(true);
 
-    expect(layer.resolution).toBe(13);
+    expect(layer.resolution).toBe(14);
     expect(map.setData).toHaveBeenCalledOnce();
   });
 
   it("clamps and rounds manual resolutions", () => {
     layer.setResolution(99);
-    expect(layer.resolution).toBe(definition("quadkey").maxResolution);
+    expect(layer.resolution).toBe(definition("xyz").maxResolution);
     layer.setResolution(3.6);
     expect(layer.resolution).toBe(4);
   });
 
-  it.each(["h3", "quadkey", "s2"])(
+  it.each(["h3", "xyz", "s2"])(
     "draws nothing and flags it when %s would need too many cells",
     (id) => {
       const grid = new GridLayer(asMap(map), definition(id));
@@ -155,8 +155,8 @@ describe("GridLayer", () => {
     layer.addToMap();
     const hovered = map.on.mock.calls.map(([type, layerId]) => [type, layerId]);
     expect(hovered).toEqual([
-      ["mouseenter", "grid-quadkey-label"],
-      ["mouseleave", "grid-quadkey-label"],
+      ["mouseenter", "grid-xyz-label"],
+      ["mouseleave", "grid-xyz-label"],
     ]);
   });
 });
@@ -165,7 +165,7 @@ describe("gridCellAtPoint", () => {
   it("only queries the label layers of visible grids", () => {
     const map = fakeMap();
     const hidden = new GridLayer(asMap(map), definition("h3"));
-    const shown = new GridLayer(asMap(map), definition("quadkey"));
+    const shown = new GridLayer(asMap(map), definition("xyz"));
     shown.setVisible(true);
     map.queryRenderedFeatures.mockReturnValue([]);
 
@@ -173,7 +173,7 @@ describe("gridCellAtPoint", () => {
       gridCellAtPoint(asMap(map), [hidden, shown], [1, 2]),
     ).toBeUndefined();
     expect(map.queryRenderedFeatures).toHaveBeenCalledWith([1, 2], {
-      layers: ["grid-quadkey-label"],
+      layers: ["grid-xyz-label"],
     });
   });
 
@@ -191,12 +191,12 @@ describe("gridCellAtPoint", () => {
 
   it("returns the exact cell rather than the rendered, tile-clipped feature", () => {
     const map = fakeMap();
-    const layer = new GridLayer(asMap(map), definition("quadkey"));
+    const layer = new GridLayer(asMap(map), definition("xyz"));
     layer.setVisible(true);
     const [cell] = map.setData.mock.lastCall![0].features;
     map.queryRenderedFeatures.mockReturnValue([
       {
-        layer: { id: "grid-quadkey-label" },
+        layer: { id: "grid-xyz-label" },
         properties: { id: cell.properties.id },
       },
     ]);
@@ -212,24 +212,24 @@ describe("cellDetails", () => {
   const map = fakeMap();
 
   it("gives the ID, level and size of the cell clicked", () => {
-    const layer = new GridLayer(asMap(map), definition("quadkey"));
+    const layer = new GridLayer(asMap(map), definition("xyz"));
     layer.setResolution(12);
     const [cell] = coverBbox([-3.7, 40.4, -3.7, 40.4], 12);
     const rows = cellDetails({ layer, cell })("metric");
     expect(rows.map((row) => row.label)).toEqual([
-      "ID",
+      "Google (Z/X/Y)",
+      "TMS (Z/X/Y)",
+      "Quadkey",
       "Zoom",
       "Parent",
       "Children (4)",
-      "Google tile (Z/X/Y)",
-      "TMS tile (Z/X/Y)",
       "Area",
       "Edge length (avg)",
     ]);
-    expect(rows[0].value).toBe(cell.properties.id);
-    expect(rows[1].value).toBe("12");
-    expect(rows[4].value).toBe("12/2005/1544");
-    expect(rows[5].value).toBe("12/2005/2551");
+    expect(rows[0].value).toBe("12/2005/1544");
+    expect(rows[1].value).toBe("12/2005/2551");
+    expect(rows[2].value).toBe("033111012101");
+    expect(rows[3].value).toBe("12");
     expect(rows[6].value).toMatch(/ km²$/);
   });
 
@@ -254,40 +254,40 @@ describe("cellDetails", () => {
   });
 
   it("keeps the level of the click, as the layer's moves on with the zoom", () => {
-    const layer = new GridLayer(asMap(map), definition("quadkey"));
+    const layer = new GridLayer(asMap(map), definition("xyz"));
     layer.setResolution(12);
     const [cell] = coverBbox([-3.7, 40.4, -3.7, 40.4], 12);
     const details = cellDetails({ layer, cell });
     layer.setResolution(14);
-    expect(details("imperial")[1].value).toBe("12");
+    expect(details("imperial")[3].value).toBe("12");
     expect(details("imperial")[7].value).toMatch(/ mi$/);
   });
 
   it("offers the parent and children, to copy or add to the map as cells", () => {
-    const layer = new GridLayer(asMap(map), definition("quadkey"));
+    const layer = new GridLayer(asMap(map), definition("xyz"));
     layer.setResolution(3);
     const cell: GridCellFeature = {
       type: "Feature",
-      properties: { id: "031", label: "031" },
+      properties: { id: "3/2/1", label: "3/2/1" },
       geometry: { type: "Polygon", coordinates: [] },
     };
-    const [, , parent, children] = cellDetails({ layer, cell })("metric");
-    expect(parent).toMatchObject({ value: "03", truncate: true });
+    const [, , , , parent, children] = cellDetails({ layer, cell })("metric");
+    expect(parent).toMatchObject({ value: "2/1/0", truncate: true });
     expect(children).toMatchObject({
       label: "Children (4)",
-      value: "0310,0311,0312,0313",
+      value: "4/4/2,4/5/2,4/4/3,4/5/3",
       truncate: true,
     });
     expect(parent.features!()).toEqual([
       {
         type: "Feature",
-        geometry: cellPolygon("03"),
-        properties: { grid: "quadkey", id: "03", zoom: 2 },
+        geometry: cellPolygon("2/1/0"),
+        properties: { grid: "xyz", id: "2/1/0", zoom: 2 },
       },
     ]);
     expect(children.features!().map((f) => f.properties)).toEqual(
-      ["0310", "0311", "0312", "0313"].map((id) => ({
-        grid: "quadkey",
+      ["4/4/2", "4/5/2", "4/4/3", "4/5/3"].map((id) => ({
+        grid: "xyz",
         id,
         zoom: 4,
       })),
@@ -357,7 +357,7 @@ describe("grid names and icons", () => {
   it("names grids plainly, each with its own cell shape", () => {
     expect(GRID_DEFINITIONS.map((def) => def.label)).toEqual([
       "H3",
-      "Quadkey",
+      "XYZ",
       "S2",
       "A5",
     ]);

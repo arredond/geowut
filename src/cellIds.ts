@@ -4,7 +4,7 @@ import { s2 } from "s2js";
 import type { Feature } from "geojson";
 import { cellFeature, GRID_DEFINITIONS } from "./grids";
 import type { GridId } from "./grids";
-import * as quadkey from "./grids/quadkey";
+import * as xyz from "./grids/xyz";
 import * as s2Grid from "./grids/s2";
 
 /** A reading of an ID as one grid's cell, by its canonical ID there. */
@@ -17,8 +17,9 @@ const PREFIXES: Record<string, GridId> = {
   h3: "h3",
   s2: "s2",
   a5: "a5",
-  quadkey: "quadkey",
-  qk: "quadkey",
+  xyz: "xyz",
+  quadkey: "xyz",
+  qk: "xyz",
 };
 
 /** Real H3, S2 and A5 integer IDs are all far bigger; smaller numbers are just numbers. */
@@ -76,21 +77,21 @@ export function cellReadings(token: string): Reading[] {
   const tile = /^(\d{1,2})\/(\d+)\/(\d+)$/.exec(text);
   if (tile) {
     const [z, x, y] = tile.slice(1).map(Number);
-    if (z >= 1 && z <= quadkey.MAX_ZOOM && x < 2 ** z && y < 2 ** z)
-      readings.push({ grid: "quadkey", id: quadkey.tileToQuadkey(x, y, z) });
+    if (z <= xyz.MAX_ZOOM && x < 2 ** z && y < 2 ** z)
+      readings.push({ grid: "xyz", id: xyz.tileId(x, y, z) });
   }
   // A lone digit is more likely a number than a whole hemisphere's tile, unless asked for.
-  const minQuadkey = forced === "quadkey" ? 1 : 2;
+  const minQuadkey = forced === "xyz" ? 1 : 2;
   const quadkeyReadings: Reading[] = new RegExp(
-    `^[0-3]{${minQuadkey},${quadkey.MAX_ZOOM}}$`,
+    `^[0-3]{${minQuadkey},${xyz.MAX_ZOOM}}$`,
   ).test(text)
-    ? [{ grid: "quadkey", id: text }]
+    ? [{ grid: "xyz", id: xyz.quadkeyToTileId(text) }]
     : [];
   // Hex IDs are at most 16 characters, and may be all digits (A5's 5180000000000000, say),
   // while decimal IDs run to 18-20 digits: short digit strings are read as hex first.
   const hex = /^(?:0x)?([0-9a-f]{1,16})$/i.exec(text);
   const hexes =
-    hex && forced !== "quadkey" ? hexReadings(hex[1], Boolean(forced)) : [];
+    hex && forced !== "xyz" ? hexReadings(hex[1], Boolean(forced)) : [];
   // A long quadkey ending in a run of zeros is the same corner tile over and over, which real
   // tiles rarely are, and A5's coarse IDs (15-16 digits) always are: then hex comes first.
   if (text.length >= 14 && /0{6}$/.test(text))

@@ -54,7 +54,7 @@ const featurePanel = new FeaturePanel(
   app,
   () => ({
     h3: gridLayers.find((l) => l.def.id === "h3")!.resolution,
-    quadkey: gridLayers.find((l) => l.def.id === "quadkey")!.resolution,
+    xyz: gridLayers.find((l) => l.def.id === "xyz")!.resolution,
     s2: gridLayers.find((l) => l.def.id === "s2")!.resolution,
     a5: gridLayers.find((l) => l.def.id === "a5")!.resolution,
   }),
@@ -202,7 +202,9 @@ map.on("load", () => {
   for (const layer of gridLayers) layer.addToMap();
   coveragePreview.addToMap();
 
-  new GridControl(app, gridLayers, () => gridInfo.show());
+  const gridControl = new GridControl(app, gridLayers, () => gridInfo.show());
+  gridControl.setZoom(map.getZoom());
+  map.on("zoom", () => gridControl.setZoom(map.getZoom()));
 
   const search = document.createElement("div");
   search.className = "search";

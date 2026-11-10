@@ -4,9 +4,9 @@ import { geometryBbox, geometryCenter, bboxToString } from "./geometry";
 import {
   a5Coverage,
   h3Coverage,
-  quadkeyCoverage,
   s2Coverage,
   TooManyCellsError,
+  xyzCoverage,
 } from "./coverage";
 import { copyText } from "./clipboard";
 import { ICONS } from "./icons";
@@ -14,7 +14,7 @@ import type { Units } from "./units";
 
 export interface Resolutions {
   h3: number;
-  quadkey: number;
+  xyz: number;
   s2: number;
   a5: number;
 }
@@ -362,11 +362,7 @@ export class FeaturePanel {
     };
     const coverings = [
       covering("h3", `H3 (res ${resolutions.h3})`, h3Coverage),
-      covering(
-        "quadkey",
-        `Quadkey (zoom ${resolutions.quadkey})`,
-        quadkeyCoverage,
-      ),
+      covering("xyz", `XYZ (zoom ${resolutions.xyz})`, xyzCoverage),
       covering("s2", `S2 (level ${resolutions.s2})`, s2Coverage),
       covering("a5", `A5 (res ${resolutions.a5})`, a5Coverage),
     ];

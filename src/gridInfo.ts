@@ -128,6 +128,15 @@ export class GridInfoModal {
       row.insertCell().textContent = formatLength(edgeKm, units);
     }
 
+    const about = document.createElement("p");
+    about.className = "grid-info-about";
+    const docs = document.createElement("a");
+    docs.href = def.docsUrl;
+    docs.target = "_blank";
+    docs.rel = "noopener";
+    docs.textContent = "Learn more";
+    about.append(`${def.description} `, docs);
+
     const note = document.createElement("p");
     note.className = "grid-info-note";
     note.textContent = def.levelStatsNote;
@@ -135,6 +144,6 @@ export class GridInfoModal {
     const scroller = document.createElement("div");
     scroller.className = "grid-info-scroll";
     scroller.appendChild(table);
-    this.body.replaceChildren(note, scroller);
+    this.body.replaceChildren(about, note, scroller);
   }
 }

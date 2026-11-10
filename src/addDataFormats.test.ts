@@ -26,10 +26,10 @@ describe("buildFormatsHelp", () => {
       "H3",
       "S2",
       "A5",
-      "Quadkey",
+      "XYZ",
       "Prefixes",
     ]);
-    expect(help.textContent).toMatch(/h3:, s2:, a5: or quadkey:/);
+    expect(help.textContent).toMatch(/h3:, s2:, a5: or xyz:/);
     expect(help.querySelectorAll("li").length).toBeGreaterThan(3);
   });
 
@@ -49,7 +49,7 @@ describe("buildFormatsHelp", () => {
       ["H3", "h3"],
       ["S2", "s2"],
       ["A5", "a5"],
-      ["Quadkey", "quadkey"],
+      ["XYZ", "xyz"],
     ])
       for (const button of under(term))
         expect(gridOf(button.textContent!)).toBe(grid);

@@ -28,7 +28,7 @@ describe("CoveragePreview", () => {
   it("draws each grid's cells in that grid's color", () => {
     const map = fakeMap();
     new CoveragePreview(map as unknown as MapLibreMap).show({
-      quadkey: ["0", "1"],
+      xyz: ["1/0/0", "1/1/0"],
       s2: ["0d4228a4"],
     });
     const { features } = map.setData.mock.lastCall![0];
@@ -38,7 +38,7 @@ describe("CoveragePreview", () => {
       features.map(
         (f: { properties: { color: string } }) => f.properties.color,
       ),
-    ).toEqual([color("quadkey"), color("quadkey"), color("s2")]);
+    ).toEqual([color("xyz"), color("xyz"), color("s2")]);
     expect(features[0].geometry.type).toBe("Polygon");
   });
 

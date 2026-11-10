@@ -5,16 +5,20 @@ import type { Bbox, CellStats, GridCellFeature } from "./types";
 import { getPaddedViewportBbox } from "../map";
 import * as a5Grid from "./a5";
 import * as h3Grid from "./h3";
-import * as quadkeyGrid from "./quadkey";
+import * as xyzGrid from "./xyz";
 import * as s2Grid from "./s2";
 import { formatArea, formatLength } from "../units";
 import type { Units } from "../units";
 
-export type GridId = "h3" | "quadkey" | "s2" | "a5";
+export type GridId = "h3" | "xyz" | "s2" | "a5";
 
 interface GridDefinition {
   id: GridId;
   label: string;
+  /** What the grid is, in a line or two, for those who haven't met it. */
+  description: string;
+  /** Where to read more about the grid. */
+  docsUrl: string;
   /** The cell's shape, as SVG drawn in a 16×16 box, for the grid's icon. */
   shape: string;
   color: string;
@@ -39,6 +43,10 @@ interface GridDefinition {
   childCells: (id: string) => string[];
   /** The ID as a 64-bit unsigned integer, for grids whose IDs are one written another way. */
   cellInteger?: (id: string) => bigint;
+  /** What the ID is called in the details, where plain "ID" won't do, as XYZ's has rivals. */
+  idLabel?: string;
+  /** The same cell named in other schemes, as XYZ tiles are by TMS and quadkeys. */
+  otherIds?: (id: string) => { label: string; value: string }[];
 }
 
 /** A grid's cell shape in its color, outlined and tinted like its cells on the map. */
@@ -53,6 +61,9 @@ export const GRID_DEFINITIONS: GridDefinition[] = [
   {
     id: "h3",
     label: "H3",
+    description:
+      "Uber's hexagonal grid. Hexagons have uniform neighbors, making H3 a favorite for aggregating and analyzing point data.",
+    docsUrl: "https://h3geo.org/docs/",
     shape:
       '<polygon points="8,1.5 13.6,4.75 13.6,11.25 8,14.5 2.4,11.25 2.4,4.75"/>',
     color: "#2a6fdb",
@@ -73,30 +84,45 @@ export const GRID_DEFINITIONS: GridDefinition[] = [
     cellInteger: h3Grid.cellInteger,
   },
   {
-    id: "quadkey",
-    label: "Quadkey",
-    // A tile split in four, as quadkeys nest.
+    id: "xyz",
+    label: "XYZ",
+    description:
+      "Web map tiles, also called slippy map tiles, named Z/X/Y as in tile URLs. Bing writes the same tiles as quadkeys, and TMS counts Y from the south.",
+    docsUrl: "https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames",
+    // A tile split in four, as tiles nest.
     shape:
       '<rect x="2" y="2" width="12" height="12" rx="0.5"/><path d="M8 2v12M2 8h12" stroke-width="1"/>',
     color: "#8a4fd0",
-    minResolution: quadkeyGrid.MIN_ZOOM,
-    maxResolution: quadkeyGrid.MAX_ZOOM,
-    resolutionForZoom: quadkeyGrid.resolutionForZoom,
-    estimateCells: quadkeyGrid.estimateCells,
-    coverBbox: quadkeyGrid.coverBbox,
+    minResolution: xyzGrid.MIN_ZOOM,
+    maxResolution: xyzGrid.MAX_ZOOM,
+    resolutionForZoom: xyzGrid.resolutionForZoom,
+    estimateCells: xyzGrid.estimateCells,
+    coverBbox: xyzGrid.coverBbox,
     resolutionName: "Zoom",
-    levelStats: quadkeyGrid.levelStats,
+    levelStats: xyzGrid.levelStats,
     levelStatsNote:
       "Tiles on the equator, the largest. Away from it they shrink with the cosine of latitude: at 60°, edges are half as long and areas a quarter.",
-    cellStats: quadkeyGrid.cellStats,
-    cellPolygon: quadkeyGrid.cellPolygon,
-    cellLevel: quadkeyGrid.cellLevel,
-    parentCell: quadkeyGrid.parentCell,
-    childCells: quadkeyGrid.childCells,
+    cellStats: xyzGrid.cellStats,
+    cellPolygon: xyzGrid.cellPolygon,
+    cellLevel: xyzGrid.cellLevel,
+    parentCell: xyzGrid.parentCell,
+    childCells: xyzGrid.childCells,
+    idLabel: "Google (Z/X/Y)",
+    otherIds: (id) => {
+      const quadkey = xyzGrid.tileQuadkey(id);
+      return [
+        { label: "TMS (Z/X/Y)", value: xyzGrid.tmsTileId(id) },
+        // Zoom 0, the whole world, has no quadkey.
+        ...(quadkey ? [{ label: "Quadkey", value: quadkey }] : []),
+      ];
+    },
   },
   {
     id: "s2",
     label: "S2",
+    description:
+      "Google's grid of a cube projected onto the sphere, its cells split in four at each level and ordered along a Hilbert curve.",
+    docsUrl: "https://s2geometry.io/",
     // A quadrilateral bulging as S2's do, being cube faces projected onto the sphere.
     shape:
       '<path d="M2.5 3Q8 1.6 13.5 2.6Q14.6 8 13.5 13.4Q8 14.6 2.5 13.5Q1.4 8 2.5 3Z"/>',
@@ -120,6 +146,9 @@ export const GRID_DEFINITIONS: GridDefinition[] = [
   {
     id: "a5",
     label: "A5",
+    description:
+      "A grid of pentagons on a dodecahedron, built so every cell of a resolution has exactly the same area.",
+    docsUrl: "https://a5geo.org/",
     // Traced from a real cell (at 115°W 8°S): A5's pentagons have equal edges but uneven angles.
     shape: '<polygon points="1.8,13.9 9.1,14.2 14.2,8.3 10.7,1.8 4.8,6.7"/>',
     color: "#1f9d55",
@@ -173,17 +202,11 @@ export function cellDetails({
   layer,
   cell,
 }: GridCellHit): (units: Units) => DetailRow[] {
-  const { id, googleTile, tmsTile } = cell.properties;
+  const { id } = cell.properties;
   const level = layer.resolution;
-  const { areaKm2, edgeKm } = layer.def.cellStats(id);
-  // Quadkeys are map tiles too, which other tools name by Z/X/Y.
-  const tiles = [
-    ...(googleTile
-      ? [{ label: "Google tile (Z/X/Y)", value: String(googleTile) }]
-      : []),
-    ...(tmsTile ? [{ label: "TMS tile (Z/X/Y)", value: String(tmsTile) }] : []),
-  ];
   const { def } = layer;
+  const { areaKm2, edgeKm } = def.cellStats(id);
+  const otherIds = def.otherIds?.(id) ?? [];
   const asFeatures = (ids: string[], cellLevel: number) => () =>
     ids.map((cellId) => cellFeature(def, cellId, cellLevel));
   const parent = def.parentCell(id);
@@ -228,11 +251,11 @@ export function cellDetails({
             : []),
         ];
   return (units) => [
-    { label: "ID", value: id },
+    { label: def.idLabel ?? "ID", value: id },
     ...integerRows,
+    ...otherIds,
     { label: layer.def.resolutionName, value: String(level) },
     ...family,
-    ...tiles,
     { label: "Area", value: formatArea(areaKm2, units) },
     { label: "Edge length (avg)", value: formatLength(edgeKm, units) },
   ];

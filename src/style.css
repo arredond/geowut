@@ -1275,8 +1275,16 @@ a.toolbar-button {
   }
 }
 
+/* Centered in the space between the info button and the chevron. */
+.grid-header-zoom {
+  margin: 0 auto;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .grid-header .grid-info-button {
-  margin-right: auto;
   width: 22px;
   height: 22px;
 }
@@ -1310,6 +1318,18 @@ a.toolbar-button {
   flex-direction: column;
   min-height: 0;
   margin-top: 12px;
+}
+
+.modal p.grid-info-about {
+  color: var(--text);
+}
+
+.grid-info-about a {
+  color: var(--accent);
+}
+
+.grid-info-about a:hover {
+  color: var(--accent-hover);
 }
 
 .modal p.grid-info-note {

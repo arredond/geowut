@@ -4,7 +4,7 @@ import type { Geometry, Position } from "geojson";
 import { geometryBbox, lengthKm } from "./geometry";
 import * as a5Grid from "./grids/a5";
 import * as h3Grid from "./grids/h3";
-import * as quadkey from "./grids/quadkey";
+import * as xyz from "./grids/xyz";
 import * as s2Grid from "./grids/s2";
 import type { Bbox } from "./grids/types";
 
@@ -110,18 +110,18 @@ export function h3Coverage(geometry: Geometry, resolution: number): string[] {
   );
 }
 
-/** Quadkeys of every tile the geometry touches, at the given zoom. */
-export function quadkeyCoverage(geometry: Geometry, zoom: number): string[] {
+/** Z/X/Y IDs of every tile the geometry touches, at the given zoom. */
+export function xyzCoverage(geometry: Geometry, zoom: number): string[] {
   const { points, lines, polygons } = parts(geometry);
   assertCoverable(
     { points, lines, polygons },
-    { bbox: quadkey.estimateCells, line: quadkey.estimateLineTiles },
+    { bbox: xyz.estimateCells, line: xyz.estimateLineTiles },
     zoom,
   );
   return union(
-    points.map((point) => quadkey.pointTile(point, zoom)),
-    ...lines.map((line) => quadkey.lineTiles(line, zoom)),
-    ...polygons.map((polygon) => quadkey.polygonTiles(polygon, zoom)),
+    points.map((point) => xyz.pointTile(point, zoom)),
+    ...lines.map((line) => xyz.lineTiles(line, zoom)),
+    ...polygons.map((polygon) => xyz.polygonTiles(polygon, zoom)),
   );
 }
 

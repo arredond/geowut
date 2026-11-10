@@ -9,6 +9,7 @@ export class GridControl {
   private collapseButton!: HTMLButtonElement;
   private collapsed = false;
   private layerToggles = new Map<GridLayer, HTMLInputElement>();
+  private zoomLabel!: HTMLElement;
 
   private onInfo: () => void;
 
@@ -45,6 +46,11 @@ export class GridControl {
     heading.textContent = "Grid layers";
     heading.addEventListener("click", () => this.setCollapsed(!this.collapsed));
 
+    // The map's zoom, as grid levels follow it.
+    this.zoomLabel = document.createElement("span");
+    this.zoomLabel.className = "grid-header-zoom";
+    this.zoomLabel.title = "Map zoom";
+
     const info = document.createElement("button");
     info.type = "button";
     info.className = "icon-button grid-info-button";
@@ -61,8 +67,13 @@ export class GridControl {
       this.setCollapsed(!this.collapsed),
     );
 
-    header.append(heading, info, this.collapseButton);
+    header.append(heading, info, this.zoomLabel, this.collapseButton);
     return header;
+  }
+
+  /** Show the map's zoom, to one decimal. */
+  setZoom(zoom: number): void {
+    this.zoomLabel.textContent = `Zoom ${zoom.toFixed(1)}`;
   }
 
   /** Folds the card down to its header, out of the way; the grids on stay on. */

@@ -4,7 +4,6 @@ import { s2 } from "s2js";
 import { describe, expect, it } from "vitest";
 import { parseFeatures } from "./addDataModal";
 import { cellReadings, parseCellIds } from "./cellIds";
-import { tileToQuadkey } from "./grids/quadkey";
 
 const MADRID = { lat: 40.4, lng: -3.7 };
 const h3Cell = h3.latLngToCell(MADRID.lat, MADRID.lng, 9);
@@ -30,12 +29,13 @@ describe("parseCellIds", () => {
       BigInt(`0x${h3Cell}`).toString(),
       { grid: "h3", id: h3Cell, resolution: 9 },
     ],
-    ["quadkey", "0313", { grid: "quadkey", id: "0313", zoom: 4 }],
+    ["quadkey", "0313", { grid: "xyz", id: "4/7/5", zoom: 4 }],
     [
       "Z/X/Y tile",
       "12/2005/1544",
-      { grid: "quadkey", id: tileToQuadkey(2005, 1544, 12), zoom: 12 },
+      { grid: "xyz", id: "12/2005/1544", zoom: 12 },
     ],
+    ["zoom 0 tile", "0/0/0", { grid: "xyz", id: "0/0/0", zoom: 0 }],
     ["S2 token", s2Token, { grid: "s2", id: s2Token, level: 12 }],
     ["S2 integer", s2Id.toString(), { grid: "s2", id: s2Token, level: 12 }],
     ["A5 hex", a5Hex, { grid: "a5", id: a5Hex, resolution: 10 }],
@@ -57,7 +57,7 @@ describe("parseCellIds", () => {
     expect(read(res0)?.[0]).toMatchObject({ grid: "a5", resolution: 0 });
     // A short quadkey ending in zeros is still a quadkey.
     expect(read("0313000000")?.[0]).toMatchObject({
-      grid: "quadkey",
+      grid: "xyz",
       zoom: 10,
     });
   });
@@ -85,10 +85,7 @@ describe("parseCellIds", () => {
     const children = h3.cellToChildren(h3Cell, 10);
     expect(read(children.join(","))?.map((p) => p.id)).toEqual(children);
     expect(read(`${s2Token}\n${s2Token.slice(0, -1)}3`)).toHaveLength(2);
-    expect(read(`${h3Cell} 0313`)?.map((p) => p.grid)).toEqual([
-      "h3",
-      "quadkey",
-    ]);
+    expect(read(`${h3Cell} 0313`)?.map((p) => p.grid)).toEqual(["h3", "xyz"]);
   });
 
   it("reads a list in the one grid that fits all of it", () => {
@@ -106,7 +103,8 @@ describe("parseCellIds", () => {
 
   it("takes a prefix to settle which grid", () => {
     expect(cellReadings(`h3:${h3Cell}`)).toEqual([{ grid: "h3", id: h3Cell }]);
-    expect(cellReadings("quadkey:1")).toEqual([{ grid: "quadkey", id: "1" }]);
+    expect(cellReadings("quadkey:1")).toEqual([{ grid: "xyz", id: "1/1/0" }]);
+    expect(cellReadings("xyz:1")).toEqual([{ grid: "xyz", id: "1/1/0" }]);
     expect(cellReadings(`s2:${s2Token}`).every((r) => r.grid === "s2")).toBe(
       true,
     );
@@ -118,7 +116,7 @@ describe("parseCellIds", () => {
     "1",
     "42",
     "12/99999/1",
-    "0/0/0",
+    "24/0/0",
     `${h3Cell}, nope`,
     "",
   ])("finds no cells in %j", (text) => {
@@ -134,7 +132,7 @@ describe("Add data with cell IDs", () => {
       id: h3Cell,
     });
     expect(parseFeatures("0313")[0].properties).toMatchObject({
-      grid: "quadkey",
+      grid: "xyz",
     });
   });
 

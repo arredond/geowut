@@ -55,6 +55,20 @@ describe("GridInfoModal", () => {
     );
   });
 
+  it("describes each grid and links to its docs", () => {
+    modal.show();
+    const link = () =>
+      document.querySelector<HTMLAnchorElement>(".grid-info-about a")!;
+    expect(document.querySelector(".grid-info-about")!.textContent).toMatch(
+      /hexagonal/,
+    );
+    expect(link().href).toBe("https://h3geo.org/docs/");
+    tab("XYZ").click();
+    expect(link().href).toBe(
+      "https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames",
+    );
+  });
+
   it("marks the level on the map, if the grid is drawn", () => {
     modal.show();
     expect(document.querySelector("tr.current")).toBeNull();

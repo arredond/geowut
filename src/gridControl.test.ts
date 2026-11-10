@@ -29,6 +29,15 @@ function fakeLayer(id: string): GridLayer {
 }
 
 describe("GridControl", () => {
+  it("shows the map's zoom in the header", () => {
+    document.body.replaceChildren();
+    const control = new GridControl(document.body, [fakeLayer("h3")]);
+    control.setZoom(12.345);
+    expect(document.querySelector(".grid-header-zoom")!.textContent).toBe(
+      "Zoom 12.3",
+    );
+  });
+
   let layers: GridLayer[];
   let onInfo: ReturnType<typeof vi.fn<() => void>>;
   const rows = () => document.querySelector<HTMLElement>(".grid-rows")!;

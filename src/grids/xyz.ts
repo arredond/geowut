@@ -5,9 +5,12 @@ import type { Bbox, CellStats, GridCellFeature } from "./types";
 export const MIN_ZOOM = 0;
 export const MAX_ZOOM = 23;
 
-/** One above the map zoom gives classic 256px tiles, as MapLibre zoom levels are based on 512px ones. */
+/**
+ * Two above the map zoom: one would give classic 256px tiles (MapLibre's zoom levels are based on 512px ones),
+ * but those are twice the size of H3 and S2 cells at the same zoom. Two keeps the grids alike.
+ */
 export function resolutionForZoom(zoom: number): number {
-  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(zoom) + 1));
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(zoom) + 2));
 }
 
 function lngToTileX(lng: number, z: number): number {
@@ -31,7 +34,24 @@ function tileYToLat(y: number, z: number): number {
   return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
 }
 
-/** Google/XYZ (x,y,z) tile -> Bing-style quadkey string. */
+/** A tile's ID, as web maps write it in tile URLs: zoom, then column, then row counting down from the north. */
+export function tileId(x: number, y: number, z: number): string {
+  return `${z}/${x}/${y}`;
+}
+
+/** The zoom, column and row of a tile from its ID. */
+export function parseTileId(id: string): { z: number; x: number; y: number } {
+  const [z, x, y] = id.split("/").map(Number);
+  return { z, x, y };
+}
+
+/** The same tile in TMS's numbering, which counts rows up from the south. */
+export function tmsTileId(id: string): string {
+  const { z, x, y } = parseTileId(id);
+  return tileId(x, 2 ** z - y - 1, z);
+}
+
+/** Tile -> Bing-style quadkey, one digit per zoom picking a quadrant. Empty at zoom 0. */
 export function tileToQuadkey(x: number, y: number, z: number): string {
   let quadkey = "";
   for (let i = z; i > 0; i--) {
@@ -42,6 +62,23 @@ export function tileToQuadkey(x: number, y: number, z: number): string {
     quadkey += digit;
   }
   return quadkey;
+}
+
+/** Quadkey -> tile ID. */
+export function quadkeyToTileId(quadkey: string): string {
+  let x = 0;
+  let y = 0;
+  for (const digit of quadkey) {
+    x = x * 2 + (Number(digit) & 1);
+    y = y * 2 + (Number(digit) >> 1);
+  }
+  return tileId(x, y, quadkey.length);
+}
+
+/** The tile's quadkey. */
+export function tileQuadkey(id: string): string {
+  const { z, x, y } = parseTileId(id);
+  return tileToQuadkey(x, y, z);
 }
 
 const EARTH_RADIUS_KM = 6371;
@@ -65,12 +102,12 @@ export function boxStats([west, south, east, north]: Bbox): CellStats {
   };
 }
 
-export function cellStats(quadkey: string): CellStats {
-  return boxStats(quadkeyBounds(quadkey));
+export function cellStats(id: string): CellStats {
+  return boxStats(tileIdBounds(id));
 }
 
-export function cellPolygon(quadkey: string): Polygon {
-  const [w, s, e, n] = quadkeyBounds(quadkey);
+export function cellPolygon(id: string): Polygon {
+  const [w, s, e, n] = tileIdBounds(id);
   return {
     type: "Polygon",
     coordinates: [
@@ -85,31 +122,29 @@ export function cellPolygon(quadkey: string): Polygon {
   };
 }
 
-/** A quadkey's zoom is its number of digits. */
-export function cellLevel(quadkey: string): number {
-  return quadkey.length;
+export function cellLevel(id: string): number {
+  return parseTileId(id).z;
 }
 
-/** The tile one zoom up containing this one: the quadkey minus its last digit. Null at zoom 1, as zoom 0's whole world has no quadkey. */
-export function parentCell(quadkey: string): string | null {
-  return quadkey.length > Math.max(MIN_ZOOM, 1) ? quadkey.slice(0, -1) : null;
+/** The tile one zoom up containing this one: column and row halved. Null at zoom 0, the whole world. */
+export function parentCell(id: string): string | null {
+  const { z, x, y } = parseTileId(id);
+  return z > MIN_ZOOM ? tileId(x >> 1, y >> 1, z - 1) : null;
 }
 
-/** The four tiles one zoom down, which exactly tile this one. */
-export function childCells(quadkey: string): string[] {
-  return quadkey.length < MAX_ZOOM
-    ? ["0", "1", "2", "3"].map((digit) => quadkey + digit)
+/** The four tiles one zoom down, which exactly tile this one, in quadkey order: NW, NE, SW, SE. */
+export function childCells(id: string): string[] {
+  const { z, x, y } = parseTileId(id);
+  return z < MAX_ZOOM
+    ? [0, 1, 2, 3].map((digit) =>
+        tileId(2 * x + (digit & 1), 2 * y + (digit >> 1), z + 1),
+      )
     : [];
 }
 
-export function quadkeyBounds(quadkey: string): Bbox {
-  let x = 0;
-  let y = 0;
-  for (const digit of quadkey) {
-    x = x * 2 + (Number(digit) & 1);
-    y = y * 2 + (Number(digit) >> 1);
-  }
-  return tileBounds(x, y, quadkey.length);
+export function tileIdBounds(id: string): Bbox {
+  const { z, x, y } = parseTileId(id);
+  return tileBounds(x, y, z);
 }
 
 function tileBounds(x: number, y: number, z: number): Bbox {
@@ -146,17 +181,10 @@ export function coverBbox(bbox: Bbox, zoom: number): GridCellFeature[] {
   for (let x = xMin; x <= xMax; x++) {
     for (let y = yMin; y <= yMax; y++) {
       const [w, s, e, n] = tileBounds(x, y, zoom);
-      const quadkey = tileToQuadkey(x, y, zoom);
-      // TMS counts rows up from the south, Google/XYZ down from the north.
-      const yTms = 2 ** zoom - y - 1;
+      const id = tileId(x, y, zoom);
       features.push({
         type: "Feature",
-        properties: {
-          id: quadkey,
-          label: quadkey,
-          googleTile: `${zoom}/${x}/${y}`,
-          tmsTile: `${zoom}/${x}/${yTms}`,
-        },
+        properties: { id, label: id },
         geometry: {
           type: "Polygon",
           coordinates: [
@@ -203,7 +231,7 @@ class TileSet {
 
   add(x: number, y: number): void {
     if (x >= 0 && y >= 0 && x <= this.max && y <= this.max)
-      this.keys.add(tileToQuadkey(x, y, this.zoom));
+      this.keys.add(tileId(x, y, this.zoom));
   }
 
   list(): string[] {

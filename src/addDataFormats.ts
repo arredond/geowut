@@ -80,15 +80,15 @@ const SECTIONS: Section[] = [
         examples: ["51ad118000000000"],
       },
       {
-        name: "Quadkey",
+        name: "XYZ",
         description:
-          "Its digits, 0 to 3, or the tile as Z/X/Y, numbered as web maps do (XYZ).",
-        examples: ["0313", "12/2005/1544"],
+          "The tile as Z/X/Y, numbered as web maps do, or its quadkey: digits 0 to 3.",
+        examples: ["12/2005/1544", "0313"],
       },
       {
         name: "Prefixes",
         description:
-          "Some IDs are valid in more than one grid. Start one with h3:, s2:, a5: or quadkey: to say which.",
+          "Some IDs are valid in more than one grid. Start one with h3:, s2:, a5: or xyz: to say which.",
         examples: ["a5:4c5a2698a737e82c"],
       },
     ],
@@ -99,7 +99,7 @@ const CAVEATS = [
   "Coordinates are longitude and latitude in degrees (WGS84). Projected ones, in metres, aren't converted.",
   "Esri JSON in other spatial references is refused rather than drawn in the wrong place.",
   "An ID that fits several grids is read as the likeliest: S2 over A5 where nothing tells them apart. A list is read in the grid that fits all of it. A prefix settles it either way.",
-  "A lone digit isn't taken for a quadkey (quadkey:1 is), nor are TMS tile numbers, which count Y from the south.",
+  "A lone digit isn't taken for a quadkey (xyz:1 is), nor are TMS tile numbers, which count Y from the south.",
   "Bounding boxes can't cross the antimeridian.",
   "No need to open this dialog: pasting onto the map does the same.",
 ];
