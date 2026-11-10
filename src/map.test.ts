@@ -6,7 +6,9 @@ import {
   compassAction,
   compassHint,
   compassTitle,
+  BUILDINGS_3D_ID,
   getPaddedViewportBbox,
+  withBuildings3d,
   withOverlays,
 } from "./map";
 
@@ -157,5 +159,113 @@ describe("the compass", () => {
   ])("resets rotation and tilt at bearing %d, pitch %d", (bearing, pitch) => {
     expect(compassAction(bearing, pitch)).toBe("reset");
     expect(compassTitle(bearing, pitch)).toMatch(/^Reset rotation and tilt\./);
+  });
+});
+
+describe("withBuildings3d", () => {
+  const style = (layers: object[]) =>
+    ({
+      version: 8,
+      sources: { openmaptiles: { type: "vector", url: "x" } },
+      layers,
+    }) as unknown as StyleSpecification;
+  const flat = (id: string, color: unknown, extra = {}) => ({
+    id,
+    type: "fill",
+    source: "openmaptiles",
+    "source-layer": "building",
+    paint: { "fill-color": color },
+    ...extra,
+  });
+  const road = {
+    id: "road",
+    type: "line",
+    source: "openmaptiles",
+    "source-layer": "transportation",
+  };
+
+  it("raises flat buildings past zoom 14, in their colour, flat ones stopping there", () => {
+    const { layers } = withBuildings3d(
+      style([flat("building", "#eee", { minzoom: 12 }), road]),
+    );
+    expect(layers.map((l) => l.id)).toEqual([
+      "building",
+      BUILDINGS_3D_ID,
+      "road",
+    ]);
+    expect(layers[0]).toMatchObject({ minzoom: 12, maxzoom: 14 });
+    expect(layers[1]).toEqual({
+      id: BUILDINGS_3D_ID,
+      type: "fill-extrusion",
+      source: "openmaptiles",
+      "source-layer": "building",
+      minzoom: 14,
+      filter: ["!", ["has", "hide_3d"]],
+      paint: {
+        "fill-extrusion-color": "#eee",
+        "fill-extrusion-height": ["get", "render_height"],
+        "fill-extrusion-base": ["get", "render_min_height"],
+        "fill-extrusion-opacity": 0.8,
+      },
+    });
+  });
+
+  it("goes above every flat building layer, in the first's colour, as Bright draws roofs over them", () => {
+    const { layers } = withBuildings3d(
+      style([
+        flat("building", "#dfdbd7"),
+        flat("building-top", "#f2eae2"),
+        road,
+      ]),
+    );
+    expect(layers.map((l) => l.id)).toEqual([
+      "building",
+      "building-top",
+      BUILDINGS_3D_ID,
+      "road",
+    ]);
+    expect(layers.slice(0, 2).map((l) => l.maxzoom)).toEqual([14, 14]);
+    expect(
+      (layers[2] as { paint: Record<string, unknown> }).paint[
+        "fill-extrusion-color"
+      ],
+    ).toBe("#dfdbd7");
+  });
+
+  it("keeps buildings as faint as the style made them", () => {
+    const { layers } = withBuildings3d(
+      style([
+        flat("building", "#223", {
+          paint: { "fill-color": "#223", "fill-opacity": 0.25 },
+        }),
+      ]),
+    );
+    expect(
+      (layers[1] as { paint: Record<string, unknown> }).paint[
+        "fill-extrusion-opacity"
+      ],
+    ).toBeCloseTo(0.2);
+  });
+
+  it("keeps an earlier end to flat buildings", () => {
+    const { layers } = withBuildings3d(
+      style([flat("building", "#eee", { maxzoom: 13 })]),
+    );
+    expect(layers[0].maxzoom).toBe(13);
+  });
+
+  it("leaves styles with 3D buildings already, as Liberty, or none, alone", () => {
+    const liberty = style([
+      flat("building", "#eee", { maxzoom: 14 }),
+      { ...flat("building-3d", "#eee"), type: "fill-extrusion", paint: {} },
+    ]);
+    expect(withBuildings3d(liberty)).toEqual(liberty);
+    const raster = style([{ id: "tiles", type: "raster", source: "x" }]);
+    expect(withBuildings3d(raster)).toEqual(raster);
+  });
+
+  it("does nothing more the second time", () => {
+    const once = withBuildings3d(style([flat("building", "#eee")]));
+    expect(withBuildings3d(once)).toEqual(once);
   });
 });

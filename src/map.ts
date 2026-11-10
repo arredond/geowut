@@ -4,7 +4,12 @@ import {
   ScaleControl,
   setWorkerUrl,
 } from "maplibre-gl";
-import type { StyleSpecification } from "maplibre-gl";
+import type {
+  ExpressionSpecification,
+  FillLayerSpecification,
+  FilterSpecification,
+  StyleSpecification,
+} from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { rasterStyle } from "./customBasemap";
 import type { Bbox } from "./grids/types";
@@ -42,7 +47,6 @@ export function createMap(
   // OpenFreeMap's tiles carry their own attribution.
   const map = new Map({
     container,
-    style,
     center: [-3, 40],
     zoom: 8,
     // MapLibre's defaults (collapsible, crediting MapLibre) plus place search, which is
@@ -55,6 +59,8 @@ export function createMap(
       ],
     },
   });
+  // Through setBasemap, so the first style is transformed (3D buildings) as later ones are.
+  setBasemap(map, style);
   startAttributionCollapsed(map);
   const scale = new ScaleControl({ unit: units });
 
@@ -167,8 +173,94 @@ function startAttributionCollapsed(map: Map): void {
 /** Swap the basemap underneath, keeping our sources and layers, with their data, on top as they were. */
 export function setBasemap(map: Map, style: string | StyleSpecification): void {
   map.setStyle(style, {
-    transformStyle: (previous, next) => withOverlays(previous, next),
+    transformStyle: (previous, next) =>
+      withOverlays(previous, withBuildings3d(next)),
   });
+}
+
+/**
+ * How a vector tile schema describes buildings: the source layer holding them, and how tall each
+ * is, for raising them in 3D. Styles are matched by schema, not by name, so a new style on a
+ * known schema needs nothing, and a new schema one entry here.
+ */
+export interface BuildingSchema {
+  sourceLayer: string;
+  height: ExpressionSpecification;
+  base: ExpressionSpecification;
+  /** Which buildings to raise: some are drawn in parts as well as whole. */
+  filter?: FilterSpecification;
+}
+
+export const BUILDING_SCHEMAS: BuildingSchema[] = [
+  // OpenMapTiles, which OpenFreeMap's styles use. Outlines flagged hide_3d also come as parts.
+  {
+    sourceLayer: "building",
+    height: ["get", "render_height"],
+    base: ["get", "render_min_height"],
+    filter: ["!", ["has", "hide_3d"]],
+  },
+];
+
+/** Where flat buildings give way to 3D ones, as in OpenFreeMap's Liberty: the tiles' last zoom. */
+export const BUILDINGS_3D_MIN_ZOOM = 14;
+export const BUILDINGS_3D_ID = "buildings-3d";
+/** As Liberty's, scaled by the flat buildings' own opacity: as subtle in 3D as they were flat. */
+const BUILDINGS_3D_OPACITY = 0.8;
+
+/** A flat layer's opacity, where it's one number; one that varies with zoom counts as whole. */
+const flatOpacity = (layer: FillLayerSpecification) => {
+  const opacity = layer.paint?.["fill-opacity"];
+  return typeof opacity === "number" ? opacity : 1;
+};
+
+/**
+ * The style with its flat buildings raised in 3D past BUILDINGS_3D_MIN_ZOOM, as Liberty has
+ * them: the flat layers stop there, and a 3D one in their colour takes over, so buildings are
+ * never drawn twice. The same data, so nothing more to download. Styles that raise their
+ * buildings already, or have none in a known schema, are left as they are.
+ */
+export function withBuildings3d(style: StyleSpecification): StyleSpecification {
+  const layers = [...style.layers];
+  for (const schema of BUILDING_SCHEMAS) {
+    const ofSchema = (type: string) =>
+      layers.filter(
+        (layer) =>
+          layer.type === type &&
+          "source-layer" in layer &&
+          layer["source-layer"] === schema.sourceLayer,
+      );
+    const flat = ofSchema("fill") as FillLayerSpecification[];
+    if (flat.length === 0 || ofSchema("fill-extrusion").length > 0) continue;
+
+    for (const layer of flat) {
+      const index = layers.indexOf(layer);
+      layers[index] = {
+        ...layer,
+        maxzoom: Math.min(layer.maxzoom ?? 24, BUILDINGS_3D_MIN_ZOOM),
+      };
+    }
+    // Above the last flat layer, in the first's colour: the main one, where a style draws
+    // roofs or outlines over it.
+    const last = layers.findIndex((l) => l.id === flat.at(-1)!.id);
+    layers.splice(last + 1, 0, {
+      id: BUILDINGS_3D_ID,
+      type: "fill-extrusion",
+      source: flat[0].source,
+      "source-layer": schema.sourceLayer,
+      minzoom: BUILDINGS_3D_MIN_ZOOM,
+      // The flat layers' filters are left out: in OpenFreeMap's, they keep polygons alone,
+      // which extrusion does anyway.
+      ...(schema.filter && { filter: schema.filter }),
+      paint: {
+        "fill-extrusion-color":
+          flat[0].paint?.["fill-color"] ?? "hsl(35, 8%, 85%)",
+        "fill-extrusion-height": schema.height,
+        "fill-extrusion-base": schema.base,
+        "fill-extrusion-opacity": BUILDINGS_3D_OPACITY * flatOpacity(flat[0]),
+      },
+    });
+  }
+  return { ...style, layers };
 }
 
 export function withOverlays(

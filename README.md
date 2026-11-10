@@ -26,19 +26,14 @@ to "no, better make it GeoJSON", all the way to "gimme a level 14 tile in Manhat
 
 ## How to use it
 
-- Drawing features: the toolbar on the left-hand side lets you draw a variety of shapes or measure on the map.
-- Adding data: use the "Add data" button (or simply copy/paste on the map) to create features from a number of formats, such as GeoJSON, WKT and WKB, GDAL bboxes, lat/long pairs in decimal or DMS, map links, H3 IDs, geohashes, plus codes, encoded polylines, etc. Anything _geowut_ can export, it can import as well.
-- Adding files: open them from "Add data", or drop or paste them anywhere on the map. GeoJSON (and GeoJSON lines), CSV
-  (with lat/lon columns, or a WKT/WKB/GeoJSON geometry column: the dialog lists the column names it reads), KML, KMZ,
-  GPX, Shapefiles (zipped, or their parts together), GeoParquet, FlatGeobuf and GeoPackage. Files are read in your
-  browser and never uploaded; the code for each format only loads when you first open one.
-- Projections: data in other coordinate systems is reprojected to WGS84 when it says which, be it an EWKT/EWKB SRID, an
-  Esri JSON spatial reference, a `.prj` or a file's own metadata. Any EPSG code for a 2D system works.
-- Z values: kept from every format, shown in a feature's details and kept in exports. Tilt the map (click the compass, or
-  Ctrl-drag) to see polygons with Z extruded to their highest Z; MapLibre can't raise lines or points.
-- Grid layers: visualize the most common geospatial indexes (H3, S2, A5, XYZ tiles) at any zoom level. Clicking on the label shows you all the properties you need, including IDs, parents and children.
-- Search: powered by [Photon](https://photon.komoot.io/) and [Nominatim](https://nominatim.org/). Click the "+" button next to a result to add the feature to the map (simplified to avoid crashing your browser).
-- Settings: light/dark/auto mode, basemap picker, etc.
+- **Drawing features**: the toolbar on the left-hand side lets you draw a variety of shapes or measure on the map.
+- **Adding data**:
+  - Simply drag and drop onto the map. Files are read in your browser and never uploaded. Currently supported formats include GeoJSON, CSV, GPX, KML/KMZ, GeoPackage, GeoParquet, Shapefile (zipped or individual components) and FlatGeoBuf.
+  - Use the "Add data" button to create features from text: GeoJSON, (E)WKT, (E)WKB, GDAL bboxes, lat/long pairs, cell IDs, etc. Anything _geowut_ can export, it can import as well. Pasting directly onto the map works as well.
+  - Files or text data in other coordinate systems are reprojected to WGS84.
+- **Grid layers**: visualize the most common geospatial indexes (H3, S2, A5, XYZ tiles) at any zoom level. Clicking on the label shows you all the properties you need, including IDs, parents and children.
+- **Search**: powered by [Photon](https://photon.komoot.io/) and [Nominatim](https://nominatim.org/). Click the "+" button next to a result to add the feature to the map (simplified to avoid crashing your browser).
+- **Settings**: light/dark/auto mode, basemap picker, etc.
 
 ## Stack
 
