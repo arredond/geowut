@@ -42,16 +42,17 @@ describe("SettingsPanel", () => {
   it("shows the current settings", () => {
     expect(radio("units", "metric").checked).toBe(true);
     expect(radio("theme", "auto").checked).toBe(true);
-    expect(radio("basemap", "liberty").checked).toBe(true);
+    expect(radio("basemap", "auto").checked).toBe(true);
   });
 
-  it("offers every OpenFreeMap style", () => {
+  it("offers Auto and every OpenFreeMap style", () => {
     const basemaps = [
       ...document.querySelectorAll<HTMLInputElement>(
         'input[name="setting-basemap"]',
       ),
     ].map((r) => r.value);
     expect(basemaps).toEqual([
+      "auto",
       "liberty",
       "bright",
       "positron",
@@ -77,8 +78,8 @@ describe("SettingsPanel", () => {
       expect(form().hidden).toBe(true);
       radio("basemap", "custom").click();
       expect(form().hidden).toBe(false);
-      expect(store.get().basemap).toBe("liberty");
-      expect(radio("basemap", "liberty").checked).toBe(true);
+      expect(store.get().basemap).toBe("auto");
+      expect(radio("basemap", "auto").checked).toBe(true);
     });
 
     it("switches once a URL is used", () => {
@@ -108,11 +109,12 @@ describe("SettingsPanel", () => {
     expect(popover().hidden).toBe(false);
   });
 
-  it("links to GeoWut's license and the third-party ones", () => {
+  it("links to GeoWut's source, its license and the third-party ones", () => {
     const links = [
       ...document.querySelectorAll<HTMLAnchorElement>(".settings-footer a"),
     ].map((a) => [a.textContent, a.getAttribute("href")]);
     expect(links).toEqual([
+      ["GitHub", "https://github.com/arredond/geowut"],
       ["MIT licensed", "https://github.com/arredond/geowut/blob/main/LICENSE"],
       ["Third-party licenses", "third-party-licenses.txt"],
     ]);

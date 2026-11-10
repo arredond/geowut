@@ -1,15 +1,20 @@
 import "./testStorage";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { applyTheme, DEFAULT_SETTINGS, SettingsStore } from "./settings";
+import {
+  applyTheme,
+  DEFAULT_SETTINGS,
+  resolveBasemap,
+  SettingsStore,
+} from "./settings";
 
 describe("SettingsStore", () => {
   beforeEach(() => localStorage.clear());
 
-  it("defaults to metric, the system theme and Liberty", () => {
+  it("defaults to metric and Auto for the theme and basemap", () => {
     expect(new SettingsStore().get()).toEqual({
       units: "metric",
       theme: "auto",
-      basemap: "liberty",
+      basemap: "auto",
       customBasemap: null,
     });
   });
@@ -96,5 +101,31 @@ describe("applyTheme", () => {
     expect(root.dataset.theme).toBe("dark");
     applyTheme("auto", root);
     expect(root.dataset.theme).toBeUndefined();
+  });
+});
+
+describe("resolveBasemap", () => {
+  it("follows the theme, or the system's when that's Auto too", () => {
+    expect(resolveBasemap({ theme: "light", basemap: "auto" }, true)).toBe(
+      "liberty",
+    );
+    expect(resolveBasemap({ theme: "dark", basemap: "auto" }, false)).toBe(
+      "dark",
+    );
+    expect(resolveBasemap({ theme: "auto", basemap: "auto" }, true)).toBe(
+      "dark",
+    );
+    expect(resolveBasemap({ theme: "auto", basemap: "auto" }, false)).toBe(
+      "liberty",
+    );
+  });
+
+  it("leaves a basemap that was picked alone", () => {
+    expect(resolveBasemap({ theme: "dark", basemap: "positron" }, true)).toBe(
+      "positron",
+    );
+    expect(resolveBasemap({ theme: "light", basemap: "fiord" }, false)).toBe(
+      "fiord",
+    );
   });
 });

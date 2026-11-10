@@ -20,8 +20,13 @@ import type { Feature } from "geojson";
 import type { LngLatLike, MapMouseEvent } from "maplibre-gl";
 import type { GeoJSONStoreFeatures } from "terra-draw";
 import { geometryBbox } from "./geometry";
-import { applyTheme, isDarkBasemap, SettingsStore } from "./settings";
-import type { Basemap } from "./settings";
+import {
+  applyTheme,
+  isDarkBasemap,
+  resolveBasemap,
+  SettingsStore,
+} from "./settings";
+import type { ShownBasemap } from "./settings";
 import { createGeocoder } from "./geocoder";
 import { datedFilename, downloadText } from "./download";
 import { ICONS } from "./icons";
@@ -38,18 +43,39 @@ const settings = new SettingsStore();
 applyTheme(settings.get().theme);
 const units = () => settings.get().units;
 
+// The Auto basemap follows the theme, and so the system's light or dark when that's Auto too.
+const systemDark = matchMedia("(prefers-color-scheme: dark)");
+const wantedBasemap = () => resolveBasemap(settings.get(), systemDark.matches);
+let shownBasemap = wantedBasemap();
+
 const { map, scale } = createMap(
   mapContainer,
-  basemapStyle(settings.get()),
+  basemapStyle({
+    basemap: shownBasemap,
+    customBasemap: settings.get().customBasemap,
+  }),
   settings.get().units,
 );
 
 const gridLayers = GRID_DEFINITIONS.map((def) => new GridLayer(map, def));
-const matchBasemap = (basemap: Basemap) => {
+const matchBasemap = (basemap: ShownBasemap) => {
   for (const layer of gridLayers)
     layer.setLabelHalo(isDarkBasemap(basemap) ? "#1a1d21" : "#ffffff");
 };
-matchBasemap(settings.get().basemap);
+matchBasemap(shownBasemap);
+
+/** Swaps the basemap if the settings or the system now call for another (or new custom tiles). */
+function showBasemap(force = false): void {
+  const basemap = wantedBasemap();
+  if (basemap === shownBasemap && !force) return;
+  shownBasemap = basemap;
+  setBasemap(
+    map,
+    basemapStyle({ basemap, customBasemap: settings.get().customBasemap }),
+  );
+  matchBasemap(basemap);
+}
+systemDark.addEventListener("change", () => showBasemap());
 
 const coveragePreview = new CoveragePreview(map);
 const extrusion = new Extrusion(map);
@@ -178,8 +204,22 @@ const draw = new DrawController(map, {
   },
 });
 
+// One band across the top: search on the left, drawing in the middle, the rest on the right.
+// On phones the drawing tools drop to the bottom edge instead.
+const topbar = document.createElement("div");
+topbar.className = "topbar";
+const [topLeft, topCenter, topRight] = ["start", "center", "end"].map(
+  (slot) => {
+    const el = document.createElement("div");
+    el.className = `topbar-${slot}`;
+    topbar.appendChild(el);
+    return el;
+  },
+);
+app.appendChild(topbar);
+
 const toolbar = new Toolbar(
-  app,
+  topCenter,
   {
     setState: (state) => draw.setState(state),
     deleteAll: () => draw.deleteAll(),
@@ -198,15 +238,9 @@ const toolbar = new Toolbar(
   units(),
 );
 
-settings.subscribe(({ units, theme, basemap, customBasemap }, changed) => {
+settings.subscribe(({ units, theme }, changed) => {
   if (changed.includes("theme")) applyTheme(theme);
-  if (
-    changed.includes("basemap") ||
-    (basemap === "custom" && changed.includes("customBasemap"))
-  ) {
-    setBasemap(map, basemapStyle({ basemap, customBasemap }));
-    matchBasemap(basemap);
-  }
+  showBasemap(shownBasemap === "custom" && changed.includes("customBasemap"));
   if (changed.includes("units")) {
     scale.setUnit(units);
     toolbar.setUnits(units);
@@ -274,12 +308,15 @@ map.on("load", () => {
 
   const gridControl = new GridControl(app, gridLayers, () => gridInfo.show());
   gridControl.setZoom(map.getZoom());
+  // Phones start with the card folded, to leave the map room.
+  if (matchMedia("(max-width: 720px)").matches) gridControl.setCollapsed(true);
   map.on("zoom", () => gridControl.setZoom(map.getZoom()));
 
   const search = document.createElement("div");
   search.className = "search";
-  app.appendChild(search);
+  topLeft.appendChild(search);
   createGeocoder(map, search, addToMap);
+  collapsibleSearch(search);
 
   const toolbar = document.createElement("div");
   toolbar.className = "toolbar";
@@ -294,7 +331,7 @@ map.on("load", () => {
   new SettingsPanel(toolbar, settings);
 
   const repoLink = document.createElement("a");
-  repoLink.className = "toolbar-button icon-only";
+  repoLink.className = "toolbar-button icon-only repo-link";
   repoLink.href = REPO_URL;
   repoLink.target = "_blank";
   repoLink.rel = "noopener noreferrer";
@@ -303,8 +340,35 @@ map.on("load", () => {
   repoLink.innerHTML = ICONS.github;
   toolbar.appendChild(repoLink);
 
-  app.appendChild(toolbar);
+  topRight.appendChild(toolbar);
 });
+
+/**
+ * Where the top band is too narrow for the whole search box, it folds to a magnifying glass
+ * that opens it across the band. It folds again on Escape, or once the map is touched or moves
+ * (as it flies to a picked place).
+ */
+function collapsibleSearch(search: HTMLElement): void {
+  const input = search.querySelector<HTMLInputElement>("input")!;
+  const open = document.createElement("button");
+  open.type = "button";
+  open.className = "toolbar-button icon-only search-toggle";
+  open.title = "Search places";
+  open.setAttribute("aria-label", "Search places");
+  open.innerHTML = ICONS.search;
+  search.prepend(open);
+
+  const setOpen = (isOpen: boolean) => search.classList.toggle("open", isOpen);
+  open.addEventListener("click", () => {
+    setOpen(true);
+    input.focus();
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") setOpen(false);
+  });
+  map.getContainer().addEventListener("pointerdown", () => setOpen(false));
+  map.on("movestart", () => setOpen(false));
+}
 
 map.on("moveend", () => {
   for (const layer of gridLayers) {

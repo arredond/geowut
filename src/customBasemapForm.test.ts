@@ -59,7 +59,7 @@ describe("CustomBasemapForm", () => {
     await submit("tiles please");
     expect(message().hidden).toBe(false);
     expect(message().classList).toContain("error");
-    expect(store.get().basemap).toBe("liberty");
+    expect(store.get().basemap).toBe("auto");
   });
 
   it("applies a service's only layer", async () => {
@@ -78,7 +78,7 @@ describe("CustomBasemapForm", () => {
   it("lets you pick among several layers", async () => {
     fetch.mockResolvedValue(new Response(wms("roads", "rivers")));
     await submit(SERVICE);
-    expect(store.get().basemap).toBe("liberty");
+    expect(store.get().basemap).toBe("auto");
     expect(select().hidden).toBe(false);
     expect([...select().options].map((o) => o.text)).toEqual([
       "Pick one of 2 layers…",

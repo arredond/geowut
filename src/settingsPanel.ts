@@ -130,12 +130,16 @@ export class SettingsPanel {
     return this.group(choice, "settings-list");
   }
 
-  /** OpenFreeMap's styles, plus Custom with a field for its URL. */
+  /** Auto, OpenFreeMap's styles, and Custom with a field for its URL. */
   private basemaps(): HTMLElement {
     const fieldset = this.list<"basemap">({
       key: "basemap",
       title: "Basemap",
-      options: [...BASEMAPS, { id: "custom", label: "Custom" }],
+      options: [
+        { id: "auto", label: "Auto (follows theme)" },
+        ...BASEMAPS,
+        { id: "custom", label: "Custom" },
+      ],
       pick: (id) => {
         // Custom only applies once there are tiles to show; until then, ask for them.
         if (id !== "custom" || this.store.get().customBasemap) {
@@ -159,7 +163,8 @@ export class SettingsPanel {
   }
 }
 
-const LICENSE_URL = "https://github.com/arredond/geowut/blob/main/LICENSE";
+const REPO_URL = "https://github.com/arredond/geowut";
+const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
 /** Written next to the site by the build, from the packages bundled. */
 const THIRD_PARTY_LICENSES_URL = "third-party-licenses.txt";
 
@@ -176,6 +181,8 @@ function licensesFooter(): HTMLElement {
     return a;
   };
   footer.append(
+    link(REPO_URL, "GitHub"),
+    " · ",
     link(LICENSE_URL, "MIT licensed"),
     " · ",
     link(THIRD_PARTY_LICENSES_URL, "Third-party licenses"),

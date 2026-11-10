@@ -32,7 +32,9 @@ describe("Toolbar", () => {
 
   it("offers every drawing tool and no select tool", () => {
     const titles = [
-      ...document.querySelectorAll<HTMLElement>(".draw-tool"),
+      ...document.querySelectorAll<HTMLElement>(
+        ".draw-tool:not(.draw-shapes-toggle)",
+      ),
     ].map((b) => b.title);
     expect(titles).toEqual([
       "Draw a point",
@@ -74,6 +76,23 @@ describe("Toolbar", () => {
     toolbar.setState("circle");
     button("Draw a circle").click();
     expect(actions.setState).toHaveBeenCalledWith("select");
+  });
+
+  it("folds the shapes behind one button, showing the one picked", () => {
+    const shapes = button("Draw a polygon").parentElement!;
+    button("Draw shapes").click();
+    expect(shapes.classList.contains("open")).toBe(true);
+    button("Draw a polygon").click();
+    expect(actions.setState).toHaveBeenCalledWith("polygon");
+    expect(shapes.classList.contains("open")).toBe(false);
+
+    toolbar.setState("polygon");
+    expect(button("Draw shapes").classList.contains("active")).toBe(true);
+    expect(button("Draw shapes").innerHTML).toBe(
+      button("Draw a polygon").innerHTML,
+    );
+    toolbar.setState("measure-line");
+    expect(button("Draw shapes").classList.contains("active")).toBe(false);
   });
 
   it("highlights only the active tool", () => {

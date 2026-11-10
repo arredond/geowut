@@ -84,13 +84,53 @@ body,
   inset: 0;
 }
 
-/* Toolbar, top-right */
-.toolbar {
+/* The top band: search, drawing tools and the rest, in one row of equal height. The tools sit
+   in the middle while the sides leave them room; the band itself lets clicks through to the map. */
+.topbar {
+  --bar-height: 40px;
   position: absolute;
   top: 12px;
-  right: 60px;
-  /* Above the feature card, so the settings popover opens over it. */
+  left: 12px;
+  right: 12px;
+  /* Above the feature card, so the settings popover and search results open over it. */
   z-index: 7;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.topbar-start,
+.topbar-center,
+.topbar-end {
+  display: flex;
+  min-width: 0;
+}
+
+.topbar-end {
+  justify-content: flex-end;
+}
+
+.topbar-start > *,
+.topbar-center > *,
+.topbar-end > * {
+  pointer-events: auto;
+}
+
+/* The map's own zoom and compass buttons, under the band's right end */
+.maplibregl-ctrl-top-right {
+  top: calc(12px + 40px);
+  right: 2px;
+}
+
+/* The scale, in line with the grid card over it */
+.maplibregl-ctrl-bottom-left {
+  left: 2px;
+}
+
+/* Actions, top-right */
+.toolbar {
   display: flex;
   gap: 8px;
 }
@@ -101,7 +141,9 @@ body,
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--panel-shadow);
-  padding: 8px 14px;
+  box-sizing: border-box;
+  height: var(--bar-height, 40px);
+  padding: 0 14px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -111,11 +153,11 @@ body,
   background: var(--hover);
 }
 
-/* Grid layer control, bottom-left */
+/* Grid layer control, bottom-left, over the scale */
 .grid-control {
   position: absolute;
   left: 12px;
-  bottom: 30px;
+  bottom: 40px;
   z-index: 5;
   width: 252px;
   padding: 10px 8px 8px;
@@ -354,7 +396,8 @@ body,
   z-index: 6;
   box-sizing: border-box;
   width: 360px;
-  height: min(600px, calc(100% - 160px));
+  /* Clear of the top band and the zoom buttons under it. */
+  height: min(600px, calc(100% - 210px));
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -724,25 +767,23 @@ body,
   background: var(--accent-hover);
 }
 
-@media (max-width: 480px) {
-  .toolbar {
-    right: 12px;
-  }
-  .feature-panel {
-    left: 10px;
-    width: auto;
-    height: min(60%, calc(100% - 160px));
-  }
+/* Place search, top-left, themed over the geocoder plugin's own styles */
+.search {
+  width: 100%;
+  max-width: 340px;
 }
 
-/* Place search, top-left beside the draw toolbar, themed over the geocoder plugin's own styles */
-.search {
-  position: absolute;
-  top: 12px;
-  left: 62px;
-  /* Leaves room for the toolbar and map controls on the right. */
-  width: min(340px, calc(100% - 62px - 290px));
-  z-index: 6;
+/* Where the band is too narrow for the box: a magnifying glass, opening it across the band.
+   (Through .search, to win over .toolbar-button.icon-only's display.) */
+.topbar .search .search-toggle {
+  display: none;
+}
+
+/* The clear button, centred in the box like the magnifying glass. */
+.search .maplibregl-ctrl-geocoder--icon-close {
+  width: 20px;
+  height: 20px;
+  margin-top: 3px;
 }
 
 .search .maplibregl-ctrl-geocoder {
@@ -759,7 +800,7 @@ body,
 }
 
 .search .maplibregl-ctrl-geocoder--input {
-  height: 36px;
+  height: 38px;
   padding: 6px 34px;
   color: var(--text);
 }
@@ -788,7 +829,7 @@ body,
 }
 
 .search .maplibregl-ctrl-geocoder--icon-search {
-  top: 8px;
+  top: 9px;
   left: 8px;
   width: 20px;
   height: 20px;
@@ -881,26 +922,15 @@ body,
   padding: 8px 12px;
 }
 
-/* On narrow screens, a row of its own under the toolbar. */
-@media (max-width: 640px) {
-  .search {
-    top: 58px;
-    left: 62px;
-    right: 12px;
-    width: auto;
-  }
-}
-
-/* Draw toolbar */
+/* Draw toolbar, top-centre */
 .draw-toolbar {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 5;
+  position: relative;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 2px;
-  padding: 4px;
+  box-sizing: border-box;
+  height: var(--bar-height);
+  padding: 3px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -936,14 +966,31 @@ body,
   color: #ffffff;
 }
 
+.draw-shapes-group,
 .draw-tool-row {
+  display: flex;
+}
+
+.draw-shapes-group {
   position: relative;
 }
 
+.draw-shapes {
+  display: flex;
+  gap: 2px;
+}
+
+/* Only on phones, where the shapes fold behind it. */
+.draw-shapes-toggle {
+  display: none;
+}
+
+/* A tool's chips (a measurement, or deleting all) hang centred under the toolbar. */
 .draw-chips {
   position: absolute;
-  top: 2px;
-  left: calc(100% + 10px);
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   gap: 4px;
 }
@@ -972,8 +1019,9 @@ body,
 }
 
 .draw-divider {
-  height: 1px;
-  margin: 2px 4px;
+  align-self: stretch;
+  width: 1px;
+  margin: 4px 4px;
   background: var(--border);
 }
 
@@ -1056,7 +1104,7 @@ body,
 .toolbar-button.icon-only {
   display: flex;
   align-items: center;
-  padding: 8px 10px;
+  padding: 0 10px;
 }
 
 /* Links styled as toolbar buttons, eg. the GitHub one */
@@ -1619,4 +1667,93 @@ a.toolbar-button {
 
 .maplibregl-ctrl-compass:focus-visible .compass-hint {
   display: flex;
+}
+
+/* Mid widths: the search folds to its icon first, and the tools follow it rather than centring. */
+@media (max-width: 960px) {
+  .topbar {
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
+
+  .search {
+    width: auto;
+  }
+
+  .topbar .search .search-toggle {
+    display: flex;
+  }
+
+  .search:not(.open) .maplibregl-ctrl-geocoder {
+    display: none;
+  }
+
+  /* Open, it spans the band, over the rest of it. */
+  .search.open {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1;
+    max-width: none;
+  }
+
+  .topbar .search.open .search-toggle {
+    display: none;
+  }
+}
+
+/* Phones: the tools drop to the bottom edge, within thumb reach, the shapes folded behind one
+   button. Above them, the scale and the grid card; the feature card stops short of them. */
+@media (max-width: 720px) {
+  .draw-toolbar {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .draw-chips {
+    top: auto;
+    bottom: calc(100% + 8px);
+  }
+
+  .draw-shapes-toggle {
+    display: flex;
+  }
+
+  .draw-shapes {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 11px);
+    left: -3px;
+    padding: 3px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--panel-shadow);
+  }
+
+  .draw-shapes.open {
+    display: flex;
+  }
+
+  /* In the settings' footer instead. */
+  .toolbar .repo-link {
+    display: none;
+  }
+
+  .maplibregl-ctrl-bottom-left {
+    bottom: 52px;
+  }
+
+  .grid-control {
+    bottom: 92px;
+  }
+
+  .feature-panel {
+    left: 10px;
+    bottom: 64px;
+    width: auto;
+    height: min(55%, calc(100% - 240px));
+  }
 }

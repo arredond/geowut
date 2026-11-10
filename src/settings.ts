@@ -13,11 +13,26 @@ export const BASEMAPS = [
   { id: "fiord", label: "Fiord", dark: true },
 ] as const;
 export type OpenFreeMapStyle = (typeof BASEMAPS)[number]["id"];
-/** Custom is a raster tile URL of the user's own, kept in customBasemap. */
-export type Basemap = OpenFreeMapStyle | "custom";
+/**
+ * Custom is a raster tile URL of the user's own, kept in customBasemap. Auto follows the theme:
+ * Liberty when it's light, Dark when it's dark.
+ */
+export type Basemap = OpenFreeMapStyle | "custom" | "auto";
+/** The basemap actually shown, Auto settled. */
+export type ShownBasemap = Exclude<Basemap, "auto">;
+
+/** Auto's pick, by the theme, or the system's when that's on Auto too. */
+export function resolveBasemap(
+  { theme, basemap }: Pick<Settings, "theme" | "basemap">,
+  systemDark: boolean,
+): ShownBasemap {
+  if (basemap !== "auto") return basemap;
+  const dark = theme === "dark" || (theme === "auto" && systemDark);
+  return dark ? "dark" : "liberty";
+}
 
 /** We can't tell what a custom basemap looks like, so it gets the light treatment. */
-export const isDarkBasemap = (basemap: Basemap) =>
+export const isDarkBasemap = (basemap: ShownBasemap) =>
   BASEMAPS.find((b) => b.id === basemap)?.dark ?? false;
 
 export const basemapStyleUrl = (basemap: OpenFreeMapStyle) =>
@@ -33,7 +48,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   units: "metric",
   theme: "auto",
-  basemap: "liberty",
+  basemap: "auto",
   customBasemap: null,
 };
 
@@ -65,6 +80,7 @@ function load(): Settings {
         saved.basemap,
         BASEMAPS.map((b) => b.id),
       ) ||
+      saved.basemap === "auto" ||
       (saved.basemap === "custom" && customBasemap)
         ? (saved.basemap as Basemap)
         : DEFAULT_SETTINGS.basemap,

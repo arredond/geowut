@@ -14,7 +14,7 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import { rasterStyle } from "./customBasemap";
 import type { Bbox } from "./grids/types";
 import { basemapStyleUrl } from "./settings";
-import type { Settings } from "./settings";
+import type { Settings, ShownBasemap } from "./settings";
 import type { Units } from "./units";
 
 // MapLibre expects its worker next to its own module, which doesn't survive bundling.
@@ -31,7 +31,10 @@ const isOverlay = (id: string) =>
 export function basemapStyle({
   basemap,
   customBasemap,
-}: Pick<Settings, "basemap" | "customBasemap">): string | StyleSpecification {
+}: {
+  basemap: ShownBasemap;
+  customBasemap: Settings["customBasemap"];
+}): string | StyleSpecification {
   if (basemap !== "custom") return basemapStyleUrl(basemap);
   // Settings never pair custom with no tiles, but the default is a safe answer if they did.
   return customBasemap

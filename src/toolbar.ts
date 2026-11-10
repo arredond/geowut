@@ -79,6 +79,8 @@ export class Toolbar {
   private undoButton: HTMLButtonElement;
   private redoButton: HTMLButtonElement;
   private exportButton: HTMLButtonElement;
+  private shapes: HTMLElement;
+  private shapesToggle: HTMLButtonElement;
 
   constructor(container: HTMLElement, actions: ToolbarActions, units: Units) {
     this.units = units;
@@ -89,11 +91,30 @@ export class Toolbar {
     const toggle = (state: DrawState) => () =>
       actions.setState(this.state === state ? "select" : state);
 
+    // The shape tools, side by side on wide screens. On phones they fold behind one button,
+    // showing the shape picked last, and open above it.
+    this.shapes = document.createElement("div");
+    this.shapes.className = "draw-shapes";
     for (const tool of TOOLS) {
-      const button = iconButton(ICONS[tool], TOOL_LABELS[tool], toggle(tool));
+      const button = iconButton(ICONS[tool], TOOL_LABELS[tool], () => {
+        this.setShapesOpen(false);
+        toggle(tool)();
+      });
       this.buttons.set(tool, button);
-      root.appendChild(button);
+      this.shapes.appendChild(button);
     }
+    this.shapesToggle = iconButton(ICONS[TOOLS[0]], "Draw shapes", () =>
+      this.setShapesOpen(this.shapes.classList.contains("open") === false),
+    );
+    this.shapesToggle.classList.add("draw-shapes-toggle");
+    this.shapesToggle.setAttribute("aria-expanded", "false");
+    const shapesGroup = document.createElement("div");
+    shapesGroup.className = "draw-shapes-group";
+    shapesGroup.append(this.shapesToggle, this.shapes);
+    root.appendChild(shapesGroup);
+    document.addEventListener("click", (e) => {
+      if (!shapesGroup.contains(e.target as Node)) this.setShapesOpen(false);
+    });
 
     const divider = document.createElement("div");
     divider.className = "draw-divider";
@@ -172,11 +193,19 @@ export class Toolbar {
     container.appendChild(root);
   }
 
+  private setShapesOpen(open: boolean): void {
+    this.shapes.classList.toggle("open", open);
+    this.shapesToggle.setAttribute("aria-expanded", String(open));
+  }
+
   setState(state: DrawState): void {
     this.state = state;
     for (const [buttonState, button] of this.buttons) {
       button.classList.toggle("active", buttonState === state);
     }
+    const shape = TOOLS.includes(state as Tool) ? (state as Tool) : null;
+    this.shapesToggle.classList.toggle("active", shape !== null);
+    if (shape) this.shapesToggle.innerHTML = ICONS[shape];
     this.deleteChips.hidden = state !== "delete";
     for (const [tool, { row }] of this.measureChips)
       row.hidden = tool !== state;
