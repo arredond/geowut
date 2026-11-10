@@ -1,5 +1,6 @@
 import type { Map as MapLibreMap, GeoJSONSource, PointLike } from "maplibre-gl";
-import type { FeatureCollection, Polygon } from "geojson";
+import type { Feature, FeatureCollection, Polygon } from "geojson";
+import type { DetailRow } from "../panel";
 import type { Bbox, CellStats, GridCellFeature } from "./types";
 import { getPaddedViewportBbox } from "../map";
 import * as h3Grid from "./h3";
@@ -27,6 +28,12 @@ interface GridDefinition {
   levelStatsNote: string;
   cellStats: (id: string) => CellStats;
   cellPolygon: (id: string) => Polygon;
+  /** The cell one level up containing this one, or null at the coarsest. */
+  parentCell: (id: string) => string | null;
+  /** The cells one level down, or none at the finest. */
+  childCells: (id: string) => string[];
+  /** The ID as a 64-bit unsigned integer, for grids whose IDs are one written another way. */
+  cellInteger?: (id: string) => bigint;
 }
 
 /** Above this many cells a grid isn't worth computing or drawing: it would hang the page and be unreadable anyway. */
@@ -48,6 +55,9 @@ export const GRID_DEFINITIONS: GridDefinition[] = [
       "Averages over all cells: the hexagons and the 12 pentagons of every resolution.",
     cellStats: h3Grid.cellStats,
     cellPolygon: h3Grid.cellPolygon,
+    parentCell: h3Grid.parentCell,
+    childCells: h3Grid.childCells,
+    cellInteger: h3Grid.cellInteger,
   },
   {
     id: "quadkey",
@@ -64,6 +74,8 @@ export const GRID_DEFINITIONS: GridDefinition[] = [
       "Tiles on the equator, the largest. Away from it they shrink with the cosine of latitude: at 60°, edges are half as long and areas a quarter.",
     cellStats: quadkeyGrid.cellStats,
     cellPolygon: quadkeyGrid.cellPolygon,
+    parentCell: quadkeyGrid.parentCell,
+    childCells: quadkeyGrid.childCells,
   },
   {
     id: "s2",
@@ -80,6 +92,9 @@ export const GRID_DEFINITIONS: GridDefinition[] = [
       "Averages over all cells. The largest cells of a level are about twice the area of the smallest.",
     cellStats: s2Grid.cellStats,
     cellPolygon: s2Grid.cellPolygon,
+    parentCell: s2Grid.parentCell,
+    childCells: s2Grid.childCells,
+    cellInteger: s2Grid.cellInteger,
   },
 ];
 
@@ -114,7 +129,7 @@ export function gridCellAtPoint(
 export function cellDetails({
   layer,
   cell,
-}: GridCellHit): (units: Units) => { label: string; value: string }[] {
+}: GridCellHit): (units: Units) => DetailRow[] {
   const { id, googleTile, tmsTile } = cell.properties;
   const level = layer.resolution;
   const { areaKm2, edgeKm } = layer.def.cellStats(id);
@@ -125,13 +140,76 @@ export function cellDetails({
       : []),
     ...(tmsTile ? [{ label: "TMS tile (Z/X/Y)", value: String(tmsTile) }] : []),
   ];
+  const { def } = layer;
+  const asFeatures = (ids: string[], cellLevel: number) => () =>
+    ids.map((cellId) => cellFeature(def, cellId, cellLevel));
+  const parent = def.parentCell(id);
+  const children = def.childCells(id);
+  const family: DetailRow[] = [
+    ...(parent
+      ? [
+          {
+            label: "Parent",
+            value: parent,
+            truncate: true,
+            features: asFeatures([parent], level - 1),
+          },
+        ]
+      : []),
+    ...(children.length > 0
+      ? [
+          {
+            label: `Children (${children.length})`,
+            value: children.join(","),
+            truncate: true,
+            features: asFeatures(children, level + 1),
+          },
+        ]
+      : []),
+  ];
+  const integer = def.cellInteger?.(id);
+  const integerRows: DetailRow[] =
+    integer === undefined
+      ? []
+      : [
+          { label: "ID (integer)", value: integer.toString(), truncate: true },
+          // BigQuery, Java and others store 64-bit IDs signed: past 2^63 that's a negative number.
+          ...(integer >= 2n ** 63n
+            ? [
+                {
+                  label: "ID (signed integer)",
+                  value: BigInt.asIntN(64, integer).toString(),
+                  truncate: true,
+                },
+              ]
+            : []),
+        ];
   return (units) => [
     { label: "ID", value: id },
+    ...integerRows,
     { label: layer.def.resolutionName, value: String(level) },
+    ...family,
     ...tiles,
     { label: "Area", value: formatArea(areaKm2, units) },
     { label: "Edge length (avg)", value: formatLength(edgeKm, units) },
   ];
+}
+
+/** A cell as a feature to draw, saying which grid and level it belongs to. */
+function cellFeature(
+  def: GridDefinition,
+  id: string,
+  level: number,
+): Feature<Polygon> {
+  return {
+    type: "Feature",
+    geometry: def.cellPolygon(id),
+    properties: {
+      grid: def.id,
+      id,
+      [def.resolutionName.toLowerCase()]: level,
+    },
+  };
 }
 
 export class GridLayer {

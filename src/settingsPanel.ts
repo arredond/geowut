@@ -1,11 +1,17 @@
+import { CustomBasemapForm } from "./customBasemapForm";
 import { ICONS } from "./icons";
 import { BASEMAPS } from "./settings";
 import type { Settings, SettingsStore } from "./settings";
 
-interface Choice<K extends keyof Settings> {
+/** Settings picked from a list of options, as opposed to the custom basemap's details. */
+type ChoiceKey = "units" | "theme" | "basemap";
+
+interface Choice<K extends ChoiceKey> {
   key: K;
   title: string;
   options: readonly { id: Settings[K]; label: string }[];
+  /** Instead of storing the pick straight away. */
+  pick?: (id: Settings[K]) => void;
 }
 
 const UNIT_CHOICE: Choice<"units"> = {
@@ -27,21 +33,17 @@ const THEME_CHOICE: Choice<"theme"> = {
   ],
 };
 
-const BASEMAP_CHOICE: Choice<"basemap"> = {
-  key: "basemap",
-  title: "Basemap",
-  options: BASEMAPS,
-};
-
 /** A gear button with a popover of settings, which apply as soon as they're picked. */
 export class SettingsPanel {
   private button: HTMLButtonElement;
   private popover: HTMLElement;
   private store: SettingsStore;
   private radios: HTMLInputElement[] = [];
+  private customForm: CustomBasemapForm;
 
   constructor(container: HTMLElement, store: SettingsStore) {
     this.store = store;
+    this.customForm = new CustomBasemapForm(store);
 
     const wrapper = document.createElement("div");
     wrapper.className = "settings";
@@ -61,7 +63,7 @@ export class SettingsPanel {
     this.popover.append(
       this.segmented(UNIT_CHOICE),
       this.segmented(THEME_CHOICE),
-      this.list(BASEMAP_CHOICE),
+      this.basemaps(),
     );
 
     wrapper.append(this.button, this.popover);
@@ -73,7 +75,11 @@ export class SettingsPanel {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") this.toggle(false);
     });
-    store.subscribe(() => this.sync());
+    store.subscribe((_, changed) => {
+      this.sync();
+      if (changed.includes("basemap") || changed.includes("customBasemap"))
+        this.customForm.reset();
+    });
   }
 
   toggle(open = this.popover.hidden !== false): void {
@@ -82,7 +88,7 @@ export class SettingsPanel {
     this.button.classList.toggle("active", open);
   }
 
-  private group<K extends keyof Settings>(
+  private group<K extends ChoiceKey>(
     choice: Choice<K>,
     className: string,
   ): HTMLElement {
@@ -100,7 +106,9 @@ export class SettingsPanel {
       radio.value = option.id;
       radio.checked = this.store.get()[choice.key] === option.id;
       radio.addEventListener("change", () =>
-        this.store.set({ [choice.key]: option.id } as Partial<Settings>),
+        choice.pick
+          ? choice.pick(option.id)
+          : this.store.set({ [choice.key]: option.id } as Partial<Settings>),
       );
       this.radios.push(radio);
 
@@ -113,12 +121,32 @@ export class SettingsPanel {
     return fieldset;
   }
 
-  private segmented<K extends keyof Settings>(choice: Choice<K>): HTMLElement {
+  private segmented<K extends ChoiceKey>(choice: Choice<K>): HTMLElement {
     return this.group(choice, "segmented");
   }
 
-  private list<K extends keyof Settings>(choice: Choice<K>): HTMLElement {
+  private list<K extends ChoiceKey>(choice: Choice<K>): HTMLElement {
     return this.group(choice, "settings-list");
+  }
+
+  /** OpenFreeMap's styles, plus Custom with a field for its URL. */
+  private basemaps(): HTMLElement {
+    const fieldset = this.list<"basemap">({
+      key: "basemap",
+      title: "Basemap",
+      options: [...BASEMAPS, { id: "custom", label: "Custom" }],
+      pick: (id) => {
+        // Custom only applies once there are tiles to show; until then, ask for them.
+        if (id !== "custom" || this.store.get().customBasemap) {
+          this.store.set({ basemap: id });
+        } else {
+          this.sync();
+          this.customForm.open();
+        }
+      },
+    });
+    fieldset.appendChild(this.customForm.element);
+    return fieldset;
   }
 
   private sync(): void {

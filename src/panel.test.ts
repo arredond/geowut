@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Geometry } from "geojson";
-import { FeaturePanel } from "./panel";
+import { buildDetailsTable, FeaturePanel } from "./panel";
 import { copyText } from "./clipboard";
 import * as coverage from "./coverage";
 
@@ -437,5 +437,77 @@ describe("FeaturePanel", () => {
     panel.show(polygon);
     document.querySelector<HTMLElement>(".panel-close")!.click();
     expect(root().hidden).toBe(true);
+  });
+});
+
+describe("buildDetailsTable", () => {
+  const square: Geometry = {
+    type: "Polygon",
+    coordinates: [
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 0],
+      ],
+    ],
+  };
+  const parent = () => [
+    { type: "Feature" as const, geometry: square, properties: { id: "03" } },
+  ];
+  const addButton = (table: HTMLTableElement) =>
+    table.querySelector<HTMLButtonElement>('button[aria-label^="Add"]');
+
+  it("cuts long values to a line, with the whole in a tooltip", () => {
+    const table = buildDetailsTable([
+      { label: "Children (4)", value: "a,b,c,d", truncate: true },
+      { label: "Name", value: "Wraps as usual" },
+    ])!;
+    const [children, name] = [...table.querySelectorAll("td:first-of-type")];
+    expect(children.className).toBe("truncate");
+    expect((children as HTMLElement).title).toBe("a,b,c,d");
+    expect(name.className).toBe("");
+  });
+
+  it("adds a row's features with its + button, and shows it", () => {
+    const addToMap = vi.fn(() => ({ added: 1 }));
+    const table = buildDetailsTable(
+      [{ label: "Parent", value: "03", features: parent }],
+      addToMap,
+    )!;
+    addButton(table)!.click();
+    expect(addToMap).toHaveBeenCalledWith(parent());
+    expect(addButton(table)!.dataset.state).toBe("copied");
+  });
+
+  it("says when nothing could be added", () => {
+    const table = buildDetailsTable(
+      [{ label: "Parent", value: "03", features: parent }],
+      () => ({ added: 0 }),
+    )!;
+    addButton(table)!.click();
+    expect(addButton(table)!.dataset.state).toBe("failed");
+  });
+
+  it("keeps showing a recent add through a redraw", () => {
+    const recentlyAdded = new Map<string, number>();
+    const rows = [{ label: "Parent", value: "03", features: parent }];
+    const addToMap = () => ({ added: 1 });
+    addButton(buildDetailsTable(rows, addToMap, recentlyAdded)!)!.click();
+    const redrawn = buildDetailsTable(rows, addToMap, recentlyAdded)!;
+    expect(addButton(redrawn)!.dataset.state).toBe("copied");
+  });
+
+  it("has no + without features or a way to add them", () => {
+    expect(
+      addButton(buildDetailsTable([{ label: "ID", value: "1" }], vi.fn())!),
+    ).toBeNull();
+    expect(
+      addButton(
+        buildDetailsTable([
+          { label: "Parent", value: "03", features: parent },
+        ])!,
+      ),
+    ).toBeNull();
   });
 });

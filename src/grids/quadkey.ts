@@ -85,6 +85,18 @@ export function cellPolygon(quadkey: string): Polygon {
   };
 }
 
+/** The tile one zoom up containing this one: the quadkey minus its last digit. Null at zoom 1, as zoom 0's whole world has no quadkey. */
+export function parentCell(quadkey: string): string | null {
+  return quadkey.length > Math.max(MIN_ZOOM, 1) ? quadkey.slice(0, -1) : null;
+}
+
+/** The four tiles one zoom down, which exactly tile this one. */
+export function childCells(quadkey: string): string[] {
+  return quadkey.length < MAX_ZOOM
+    ? ["0", "1", "2", "3"].map((digit) => quadkey + digit)
+    : [];
+}
+
 export function quadkeyBounds(quadkey: string): Bbox {
   let x = 0;
   let y = 0;

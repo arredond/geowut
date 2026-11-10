@@ -21,6 +21,7 @@ describe("Toolbar", () => {
       deleteAll: vi.fn(),
       undo: vi.fn(),
       redo: vi.fn(),
+      exportAll: vi.fn(),
     };
     toolbar = new Toolbar(
       document.body,
@@ -45,7 +46,13 @@ describe("Toolbar", () => {
       "Delete features",
       "Undo",
       "Redo",
+      "Export all features as GeoJSON",
     ]);
+  });
+
+  it("exports", () => {
+    button("Export all features as GeoJSON").click();
+    expect(actions.exportAll).toHaveBeenCalledOnce();
   });
 
   it("picks a tool", () => {

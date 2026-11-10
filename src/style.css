@@ -422,6 +422,162 @@ body,
   }
 }
 
+/* Place search, top-left beside the draw toolbar, themed over the geocoder plugin's own styles */
+.search {
+  position: absolute;
+  top: 12px;
+  left: 62px;
+  /* Leaves room for the toolbar and map controls on the right. */
+  width: min(340px, calc(100% - 62px - 290px));
+  z-index: 6;
+}
+
+.search .maplibregl-ctrl-geocoder {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow);
+}
+
+.search .maplibregl-ctrl-geocoder--input {
+  height: 36px;
+  padding: 6px 34px;
+  color: var(--text);
+}
+
+/* The plugin has its own clear button; hide the browser's for search inputs. */
+.search .maplibregl-ctrl-geocoder--input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search .maplibregl-ctrl-geocoder--input::placeholder {
+  color: var(--text-muted);
+}
+
+.search .maplibregl-ctrl-geocoder--input:focus {
+  color: var(--text);
+  outline: none;
+}
+
+.search .maplibregl-ctrl-geocoder:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.search .maplibregl-ctrl-geocoder--icon {
+  fill: var(--text-muted);
+}
+
+.search .maplibregl-ctrl-geocoder--icon-search {
+  top: 8px;
+  left: 8px;
+  width: 20px;
+  height: 20px;
+}
+
+.search .maplibregl-ctrl-geocoder--button {
+  background: transparent;
+}
+
+.search .maplibregl-ctrl-geocoder .suggestions {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow);
+  font-size: 13px;
+}
+
+.search .maplibregl-ctrl-geocoder .suggestions > li > a {
+  color: var(--text);
+  padding: 8px 12px;
+}
+
+.search .maplibregl-ctrl-geocoder .suggestions > .active > a,
+.search .maplibregl-ctrl-geocoder .suggestions > li > a:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.search .maplibregl-ctrl-geocoder--result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search .geocoder-result-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Add a result to the map, with its outline */
+.search .geocoder-add {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.search .geocoder-add svg {
+  width: 16px;
+  height: 16px;
+}
+
+.search .geocoder-add:hover {
+  color: var(--text);
+  background: var(--bg);
+}
+
+.search .geocoder-add[data-state="loading"] {
+  cursor: progress;
+  animation: geocoder-add-pulse 0.8s ease-in-out infinite alternate;
+}
+
+.search .geocoder-add[data-state="added"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.search .geocoder-add[data-state="failed"] {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+@keyframes geocoder-add-pulse {
+  to {
+    opacity: 0.35;
+  }
+}
+
+.search .maplibre-gl-geocoder--error {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 8px 12px;
+}
+
+/* On narrow screens, a row of its own under the toolbar. */
+@media (max-width: 640px) {
+  .search {
+    top: 58px;
+    left: 62px;
+    right: 12px;
+    width: auto;
+  }
+}
+
 /* Draw toolbar */
 .draw-toolbar {
   position: absolute;
@@ -590,6 +746,11 @@ body,
   padding: 8px 10px;
 }
 
+/* Links styled as toolbar buttons, eg. the GitHub one */
+a.toolbar-button {
+  text-decoration: none;
+}
+
 .toolbar-button.active {
   background: var(--hover);
 }
@@ -723,6 +884,73 @@ body,
   background: var(--accent);
 }
 
+/* Custom basemap URL, under the Custom option */
+.custom-basemap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.custom-basemap[hidden],
+.custom-basemap [hidden] {
+  display: none;
+}
+
+.custom-basemap input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.custom-basemap button {
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.custom-basemap button:hover {
+  background: var(--hover);
+}
+
+.custom-basemap select {
+  flex-basis: 100%;
+  min-width: 0;
+  padding: 5px 6px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.custom-basemap button:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.custom-basemap-message {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.custom-basemap-message.error {
+  color: var(--danger);
+}
+
 /* Grid control header: title, info, all-grids toggle */
 .grid-header-title {
   cursor: pointer;
@@ -840,6 +1068,15 @@ body,
 
 .details-table td {
   font-weight: 600;
+}
+
+/* Long values on one line, cut with an ellipsis: max-width 0 lets the cell take what's left */
+.details-table td.truncate {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
 }
 
 /* The copy button cell: no wider than its button */

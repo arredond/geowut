@@ -10,6 +10,7 @@ export interface ToolbarActions {
   deleteAll: () => void;
   undo: () => void;
   redo: () => void;
+  exportAll: () => void;
 }
 
 const TOOL_LABELS: Record<Tool, string> = {
@@ -46,7 +47,7 @@ function iconButton(
   return button;
 }
 
-export function isTyping(event: KeyboardEvent): boolean {
+export function isTyping(event: Event): boolean {
   return (
     event.target instanceof Element &&
     event.target.matches('textarea, input:not([type="checkbox"])')
@@ -155,6 +156,17 @@ export class Toolbar {
     this.undoButton.disabled = true;
     this.redoButton.disabled = true;
     root.append(this.undoButton, this.redoButton);
+
+    const exportDivider = document.createElement("div");
+    exportDivider.className = "draw-divider";
+    root.append(
+      exportDivider,
+      iconButton(
+        ICONS.download,
+        "Export all features as GeoJSON",
+        actions.exportAll,
+      ),
+    );
 
     container.appendChild(root);
   }

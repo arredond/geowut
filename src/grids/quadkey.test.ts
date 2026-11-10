@@ -110,3 +110,17 @@ describe("cellPolygon", () => {
     expect(cellPolygon(cell.properties.id)).toEqual(cell.geometry);
   });
 });
+
+describe("parentCell and childCells", async () => {
+  const { parentCell, childCells } = await import("./quadkey");
+
+  it("drops or adds a digit", () => {
+    expect(parentCell("0313")).toBe("031");
+    expect(childCells("031")).toEqual(["0310", "0311", "0312", "0313"]);
+  });
+
+  it("stops at zoom 1 and 23", () => {
+    expect(parentCell("0")).toBeNull();
+    expect(childCells("0".repeat(23))).toEqual([]);
+  });
+});

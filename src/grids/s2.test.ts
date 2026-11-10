@@ -77,3 +77,35 @@ describe("cellPolygon", () => {
     expect(cellPolygon(cell.properties.id)).toEqual(cell.geometry);
   });
 });
+
+describe("parentCell and childCells", async () => {
+  const { parentCell, childCells } = await import("./s2");
+  const token = s2.cellid.toToken(
+    s2.cellid.parent(
+      s2.cellid.fromLatLng(s2.LatLng.fromDegrees(40.4, -3.7)),
+      10,
+    ),
+  );
+
+  it("goes one level up and down", () => {
+    const parent = parentCell(token)!;
+    expect(s2.cellid.level(s2.cellid.fromToken(parent))).toBe(9);
+    const children = childCells(token);
+    expect(children).toHaveLength(4);
+    expect(children.every((child) => parentCell(child) === token)).toBe(true);
+  });
+
+  it("stops at the levels shown", () => {
+    const level1 = s2.cellid.toToken(
+      s2.cellid.parent(s2.cellid.fromToken(token), 1),
+    );
+    expect(parentCell(level1)).toBeNull();
+    const level24 = s2.cellid.toToken(
+      s2.cellid.parent(
+        s2.cellid.fromLatLng(s2.LatLng.fromDegrees(40.4, -3.7)),
+        24,
+      ),
+    );
+    expect(childCells(level24)).toEqual([]);
+  });
+});

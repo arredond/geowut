@@ -10,6 +10,7 @@ describe("SettingsStore", () => {
       units: "metric",
       theme: "auto",
       basemap: "liberty",
+      customBasemap: null,
     });
   });
 
@@ -31,6 +32,42 @@ describe("SettingsStore", () => {
       ...DEFAULT_SETTINGS,
       theme: "dark",
     });
+  });
+
+  it("keeps a custom basemap only while its tiles make sense", () => {
+    const customBasemap = {
+      url: "https://example.com/wmts?REQUEST=GetCapabilities",
+      layer: "Ortho",
+      source: {
+        tiles: ["https://example.com/wmts/{z}/{y}/{x}.png"],
+        scheme: "xyz" as const,
+        tileSize: 256,
+        minzoom: 0,
+        maxzoom: 19,
+        bounds: [-10, 35, 5, 44] as [number, number, number, number],
+      },
+    };
+    new SettingsStore().set({ basemap: "custom", customBasemap });
+    expect(new SettingsStore().get()).toMatchObject({
+      basemap: "custom",
+      customBasemap,
+    });
+
+    for (const broken of [
+      { url: "nope", source: customBasemap.source },
+      { url: customBasemap.url, source: { tiles: [], scheme: "xyz" } },
+      {
+        url: customBasemap.url,
+        source: { tiles: ["javascript:1"], scheme: "xyz" },
+      },
+      { ...customBasemap, source: { ...customBasemap.source, bounds: [1, 2] } },
+    ]) {
+      localStorage.setItem(
+        "geowut:settings",
+        JSON.stringify({ basemap: "custom", customBasemap: broken }),
+      );
+      expect(new SettingsStore().get()).toEqual(DEFAULT_SETTINGS);
+    }
   });
 
   it("survives garbled storage", () => {

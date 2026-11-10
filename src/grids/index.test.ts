@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { cellDetails, gridCellAtPoint, GridLayer, GRID_DEFINITIONS } from ".";
 import type { GridCellFeature } from ".";
-import { coverBbox } from "./quadkey";
+import { cellPolygon, coverBbox } from "./quadkey";
 
 function fakeMap(zoom = 12) {
   const setData = vi.fn();
@@ -213,6 +213,8 @@ describe("cellDetails", () => {
     expect(rows.map((row) => row.label)).toEqual([
       "ID",
       "Zoom",
+      "Parent",
+      "Children (4)",
       "Google tile (Z/X/Y)",
       "TMS tile (Z/X/Y)",
       "Area",
@@ -220,9 +222,9 @@ describe("cellDetails", () => {
     ]);
     expect(rows[0].value).toBe(cell.properties.id);
     expect(rows[1].value).toBe("12");
-    expect(rows[2].value).toBe("12/2005/1544");
-    expect(rows[3].value).toBe("12/2005/2551");
-    expect(rows[4].value).toMatch(/ km²$/);
+    expect(rows[4].value).toBe("12/2005/1544");
+    expect(rows[5].value).toBe("12/2005/2551");
+    expect(rows[6].value).toMatch(/ km²$/);
   });
 
   it("has no tile names for H3 and S2 cells", () => {
@@ -234,7 +236,15 @@ describe("cellDetails", () => {
     };
     expect(
       cellDetails({ layer, cell })("metric").map((row) => row.label),
-    ).toEqual(["ID", "Resolution", "Area", "Edge length (avg)"]);
+    ).toEqual([
+      "ID",
+      "ID (integer)",
+      "Resolution",
+      "Parent",
+      "Children (7)",
+      "Area",
+      "Edge length (avg)",
+    ]);
   });
 
   it("keeps the level of the click, as the layer's moves on with the zoom", () => {
@@ -244,6 +254,95 @@ describe("cellDetails", () => {
     const details = cellDetails({ layer, cell });
     layer.setResolution(14);
     expect(details("imperial")[1].value).toBe("12");
-    expect(details("imperial")[5].value).toMatch(/ mi$/);
+    expect(details("imperial")[7].value).toMatch(/ mi$/);
+  });
+
+  it("offers the parent and children, to copy or add to the map as cells", () => {
+    const layer = new GridLayer(asMap(map), definition("quadkey"));
+    layer.setResolution(3);
+    const cell: GridCellFeature = {
+      type: "Feature",
+      properties: { id: "031", label: "031" },
+      geometry: { type: "Polygon", coordinates: [] },
+    };
+    const [, , parent, children] = cellDetails({ layer, cell })("metric");
+    expect(parent).toMatchObject({ value: "03", truncate: true });
+    expect(children).toMatchObject({
+      label: "Children (4)",
+      value: "0310,0311,0312,0313",
+      truncate: true,
+    });
+    expect(parent.features!()).toEqual([
+      {
+        type: "Feature",
+        geometry: cellPolygon("03"),
+        properties: { grid: "quadkey", id: "03", zoom: 2 },
+      },
+    ]);
+    expect(children.features!().map((f) => f.properties)).toEqual(
+      ["0310", "0311", "0312", "0313"].map((id) => ({
+        grid: "quadkey",
+        id,
+        zoom: 4,
+      })),
+    );
+  });
+
+  it("gives H3 and S2 IDs as integers, signed too when that differs", () => {
+    const rows = (grid: "h3" | "s2", id: string) =>
+      Object.fromEntries(
+        cellDetails({
+          layer: new GridLayer(asMap(map), definition(grid)),
+          cell: {
+            type: "Feature",
+            properties: { id, label: "" },
+            geometry: { type: "Polygon", coordinates: [] },
+          },
+        })("metric").map((row) => [row.label, row.value]),
+      );
+
+    // H3's own documentation example. Its top bit is never set, so signed is the same.
+    expect(rows("h3", "8928308280fffff")).toMatchObject({
+      "ID (integer)": "617700169958293503",
+    });
+    expect(rows("h3", "8928308280fffff")).not.toHaveProperty(
+      "ID (signed integer)",
+    );
+
+    // An S2 cell on face 4, past 2^63.
+    expect(rows("s2", "94")).toMatchObject({
+      "ID (integer)": "10664523917613334528",
+      "ID (signed integer)": "-7782220156096217088",
+    });
+    // Long enough to wrap, so kept to one line like the children.
+    const integerRows = cellDetails({
+      layer: new GridLayer(asMap(map), definition("s2")),
+      cell: {
+        type: "Feature",
+        properties: { id: "94", label: "" },
+        geometry: { type: "Polygon", coordinates: [] },
+      },
+    })("metric").filter((row) => row.label.startsWith("ID ("));
+    expect(integerRows.every((row) => row.truncate)).toBe(true);
+
+    // Face 0 fits in a signed integer as is.
+    expect(rows("s2", "0d682c")).not.toHaveProperty("ID (signed integer)");
+  });
+
+  it("has no parent at the coarsest level, nor children at the finest", () => {
+    const layer = new GridLayer(asMap(map), definition("h3"));
+    const labels = (id: string) =>
+      cellDetails({
+        layer,
+        cell: {
+          type: "Feature",
+          properties: { id, label: "" },
+          geometry: { type: "Polygon", coordinates: [] },
+        },
+      })("metric").map((row) => row.label);
+    expect(labels("8001fffffffffff")).not.toContain("Parent");
+    expect(labels("8f2830828052d25")).not.toContainEqual(
+      expect.stringMatching(/^Children/),
+    );
   });
 });

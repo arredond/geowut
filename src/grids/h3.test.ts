@@ -166,3 +166,22 @@ describe("cellPolygon", () => {
     expect(cellPolygon(cell.properties.id)).toEqual(cell.geometry);
   });
 });
+
+describe("parentCell and childCells", async () => {
+  const { parentCell, childCells } = await import("./h3");
+  const cell = "8928308280fffff";
+
+  it("goes one resolution up and down", () => {
+    expect(parentCell(cell)).toBe(h3.cellToParent(cell, 8));
+    expect(childCells(cell)).toHaveLength(7);
+    expect(childCells(cell).every((c) => h3.getResolution(c) === 10)).toBe(
+      true,
+    );
+    expect(childCells(cell).every((c) => parentCell(c) === cell)).toBe(true);
+  });
+
+  it("stops at the ends of the grid", () => {
+    expect(parentCell("8001fffffffffff")).toBeNull();
+    expect(childCells("8f2830828052d25")).toEqual([]);
+  });
+});

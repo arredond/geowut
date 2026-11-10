@@ -1,5 +1,5 @@
 import { geojsonToWKT } from "@terraformer/wkt";
-import type { Geometry } from "geojson";
+import type { Feature, Geometry } from "geojson";
 import { geometryBbox, geometryCenter, bboxToString } from "./geometry";
 import {
   h3Coverage,
@@ -20,7 +20,14 @@ export interface Resolutions {
 export interface DetailRow {
   label: string;
   value: string;
+  /** Cut to one line with an ellipsis (the full value in a tooltip), as for long cell IDs. */
+  truncate?: boolean;
+  /** Features this row stands for, which a + button adds to the map, as for a cell's parent. */
+  features?: () => Feature[];
 }
+
+/** Adds features to the map, saying how many made it. */
+export type AddToMap = (features: Feature[]) => { added: number };
 
 /** Coverings past this many cells are too many to draw. */
 export const MAX_PREVIEW_CELLS = 10_000;
@@ -94,17 +101,55 @@ function feedbackParts(): [HTMLElement, HTMLElement] {
   return [status, icon];
 }
 
+/** Add to the map, then say how it went on the button itself, like copying does. */
+function addWithFeedback(
+  button: HTMLElement,
+  features: () => Feature[],
+  addToMap: AddToMap,
+  recentlyAdded?: Map<string, number>,
+): void {
+  const { added } = addToMap(features());
+  if (added === 0) return showFailure(button, "Couldn't add it", ICONS.plus);
+  // Adding moves the map, which can redraw the panel: the new button picks this up.
+  recentlyAdded?.set(button.title, Date.now());
+  showAdded(button, FEEDBACK_MS);
+}
+
+function showAdded(button: HTMLElement, forMs: number): void {
+  button.dataset.state = "copied";
+  button.querySelector(".copy-status")!.textContent = "Added";
+  button.querySelector(".copy-icon")!.innerHTML = ICONS.check;
+  clearTimeout(feedbackTimers.get(button));
+  feedbackTimers.set(
+    button,
+    setTimeout(() => {
+      delete button.dataset.state;
+      button.querySelector(".copy-status")!.textContent = "";
+      button.querySelector(".copy-icon")!.innerHTML = ICONS.plus;
+    }, forMs),
+  );
+}
+
 /** Built from DOM nodes rather than HTML, as pasted properties are arbitrary text. */
-export function buildDetailsTable(rows: DetailRow[]): HTMLTableElement | null {
+export function buildDetailsTable(
+  rows: DetailRow[],
+  addToMap?: AddToMap,
+  recentlyAdded?: Map<string, number>,
+): HTMLTableElement | null {
   if (rows.length === 0) return null;
   const table = document.createElement("table");
   table.className = "details-table";
-  for (const { label, value } of rows) {
+  for (const { label, value, truncate, features } of rows) {
     const row = table.insertRow();
     const name = document.createElement("th");
     name.textContent = label;
     row.append(name);
-    row.insertCell().textContent = value;
+    const cell = row.insertCell();
+    cell.textContent = value;
+    if (truncate) {
+      cell.className = "truncate";
+      cell.title = value;
+    }
 
     const copy = document.createElement("button");
     copy.type = "button";
@@ -113,7 +158,25 @@ export function buildDetailsTable(rows: DetailRow[]): HTMLTableElement | null {
     copy.setAttribute("aria-label", `Copy ${label}`);
     copy.append(...feedbackParts());
     copy.addEventListener("click", () => copyWithFeedback(copy, () => value));
-    row.insertCell().appendChild(copy);
+    const actions = row.insertCell();
+    if (features && addToMap) {
+      const add = document.createElement("button");
+      add.type = "button";
+      add.className = "copy-value";
+      add.title = `Add ${label} to the map`;
+      add.setAttribute("aria-label", `Add ${label} to the map`);
+      const [status, icon] = feedbackParts();
+      icon.innerHTML = ICONS.plus;
+      add.append(status, icon);
+      add.addEventListener("click", () =>
+        addWithFeedback(add, features, addToMap, recentlyAdded),
+      );
+      const addedAgo =
+        Date.now() - (recentlyAdded?.get(add.title) ?? -Infinity);
+      if (addedAgo < FEEDBACK_MS) showAdded(add, FEEDBACK_MS - addedAgo);
+      actions.appendChild(add);
+    }
+    actions.appendChild(copy);
   }
   return table;
 }
@@ -146,7 +209,11 @@ function buildCopyList<T extends CopyItem>(
 }
 
 /** Say why on the row's own copy button, as a failed copy would. */
-function showFailure(button: HTMLElement, message: string): void {
+function showFailure(
+  button: HTMLElement,
+  message: string,
+  icon = ICONS.copy,
+): void {
   button.dataset.state = "failed";
   button.querySelector(".copy-status")!.textContent = message;
   button.querySelector(".copy-icon")!.innerHTML = "";
@@ -156,7 +223,7 @@ function showFailure(button: HTMLElement, message: string): void {
     setTimeout(() => {
       delete button.dataset.state;
       button.querySelector(".copy-status")!.textContent = "";
-      button.querySelector(".copy-icon")!.innerHTML = ICONS.copy;
+      button.querySelector(".copy-icon")!.innerHTML = icon;
     }, FEEDBACK_MS * 2),
   );
 }
@@ -187,6 +254,9 @@ export class FeaturePanel {
   private getUnits: () => Units;
   private shown?: [Geometry, PanelContent];
   private onPreview: (cells: Partial<Record<Grid, string[]>>) => void;
+  private addToMap?: AddToMap;
+  /** When each row's features were last added, by button title, to keep showing it through redraws. */
+  private recentlyAdded = new Map<string, number>();
   /** Coverings toggled on, which stay on as the levels change... */
   private wanted = new Set<Grid>();
   /** ...those of them drawn on the map, with their cells... */
@@ -199,10 +269,12 @@ export class FeaturePanel {
     getResolutions: () => Resolutions,
     getUnits: () => Units = () => "metric",
     onPreview: (cells: Partial<Record<Grid, string[]>>) => void = () => {},
+    addToMap?: AddToMap,
   ) {
     this.getResolutions = getResolutions;
     this.getUnits = getUnits;
     this.onPreview = onPreview;
+    this.addToMap = addToMap;
     this.root = document.createElement("div");
     this.root.className = "feature-panel";
     this.root.hidden = true;
@@ -238,7 +310,10 @@ export class FeaturePanel {
       );
     }
 
-    if (!sameSubject) this.wanted.clear();
+    if (!sameSubject) {
+      this.wanted.clear();
+      this.recentlyAdded.clear();
+    }
     const coverings = this.coverings(geometry, content.cell);
     this.updatePreviews(coverings.filter((c) => this.wanted.has(c.grid)));
     this.render(content.details?.(this.getUnits()) ?? [], formats, coverings);
@@ -352,7 +427,7 @@ export class FeaturePanel {
     closeButton.addEventListener("click", () => this.hide());
     this.root.appendChild(closeButton);
 
-    const table = buildDetailsTable(details);
+    const table = buildDetailsTable(details, this.addToMap, this.recentlyAdded);
     if (table) this.root.appendChild(section("Properties", table));
     this.root.appendChild(section("Copy as", buildCopyList(formats)));
     if (coverings.length > 0) {

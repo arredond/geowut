@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import type { StyleSpecification } from "maplibre-gl";
-import { getPaddedViewportBbox, withOverlays } from "./map";
+import { basemapStyle, getPaddedViewportBbox, withOverlays } from "./map";
 
 function mapWithBounds(
   west: number,
@@ -92,5 +92,36 @@ describe("withOverlays", () => {
   it("takes the new style as it is on first load", () => {
     const next = style(["openmaptiles"], ["roads"]);
     expect(withOverlays(undefined, next)).toBe(next);
+  });
+});
+
+describe("basemapStyle", () => {
+  it("points OpenFreeMap styles at their URL", () => {
+    expect(basemapStyle({ basemap: "dark", customBasemap: null })).toBe(
+      "https://tiles.openfreemap.org/styles/dark",
+    );
+  });
+
+  it("wraps a custom URL in a raster style", () => {
+    const style = basemapStyle({
+      basemap: "custom",
+      customBasemap: {
+        url: "https://t.example.com/{z}/{x}/{y}.png",
+        source: {
+          tiles: ["https://t.example.com/{z}/{x}/{y}.png"],
+          scheme: "xyz",
+        },
+      },
+    }) as StyleSpecification;
+    expect(style.sources.basemap).toMatchObject({
+      type: "raster",
+      tiles: ["https://t.example.com/{z}/{x}/{y}.png"],
+    });
+  });
+
+  it("falls back to Liberty without custom tiles", () => {
+    expect(basemapStyle({ basemap: "custom", customBasemap: null })).toBe(
+      "https://tiles.openfreemap.org/styles/liberty",
+    );
   });
 });

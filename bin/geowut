@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# Start or stop GeoWut's local dev server in the background.
+# Usage: bin/geowut start|stop   (PORT=5173 by default)
+# start installs dependencies first when they're missing or out of date.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+STATE="$ROOT/.geowut"
+PID_FILE="$STATE/dev.pid"
+PORT_FILE="$STATE/dev.port"
+LOG_FILE="$STATE/dev.log"
+
+running() {
+  [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+}
+
+url() {
+  echo "http://localhost:$1/"
+}
+
+# Anything listening, on any interface: Vite's --strictPort misses servers bound elsewhere (eg. vite --host).
+port_taken() {
+  if command -v lsof >/dev/null; then
+    lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+  else
+    (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
+  fi
+}
+
+# npm records each install in node_modules/.package-lock.json, so a package file newer than it means one is due.
+install_if_needed() {
+  local installed="$ROOT/node_modules/.package-lock.json"
+  if [[ -x "$ROOT/node_modules/.bin/vite" && -f "$installed" &&
+    ! "$ROOT/package.json" -nt "$installed" &&
+    ! "$ROOT/package-lock.json" -nt "$installed" ]]; then
+    return
+  fi
+  echo "Installing dependencies…"
+  (cd "$ROOT" && npm install --no-audit --no-fund) || {
+    echo "npm install failed." >&2
+    exit 1
+  }
+  # npm leaves it alone when nothing changed; mark it fresh so the next start doesn't install again.
+  touch "$installed"
+}
+
+start() {
+  local port="${PORT:-5173}"
+  if running; then
+    echo "Already running (pid $(cat "$PID_FILE")): $(url "$(cat "$PORT_FILE")")"
+    return
+  fi
+  install_if_needed
+  if port_taken "$port"; then
+    echo "Port $port is already in use, stop whatever is on it or pick another PORT." >&2
+    exit 1
+  fi
+
+  mkdir -p "$STATE"
+  cd "$ROOT"
+  # Vite itself rather than npm/npx, so the pid is the server's and stop can kill it.
+  nohup node_modules/.bin/vite --port "$port" --strictPort >"$LOG_FILE" 2>&1 &
+  echo $! >"$PID_FILE"
+  echo "$port" >"$PORT_FILE"
+
+  for _ in $(seq 50); do
+    if curl -fsS -o /dev/null "$(url "$port")" 2>/dev/null; then
+      echo "Dev server running (pid $(cat "$PID_FILE")): $(url "$port")"
+      return
+    fi
+    running || break
+    sleep 0.2
+  done
+
+  echo "Dev server didn't come up, see $LOG_FILE:" >&2
+  tail -n 20 "$LOG_FILE" >&2
+  stop >/dev/null
+  exit 1
+}
+
+stop() {
+  if ! running; then
+    rm -f "$PID_FILE" "$PORT_FILE"
+    echo "Not running."
+    return
+  fi
+  local pid
+  pid="$(cat "$PID_FILE")"
+  kill "$pid"
+  for _ in $(seq 25); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.2
+  done
+  if kill -0 "$pid" 2>/dev/null; then kill -9 "$pid"; fi
+  rm -f "$PID_FILE" "$PORT_FILE"
+  echo "Dev server stopped."
+}
+
+case "${1:-}" in
+  start) start ;;
+  stop) stop ;;
+  *)
+    echo "Usage: $(basename "$0") start|stop" >&2
+    exit 64
+    ;;
+esac

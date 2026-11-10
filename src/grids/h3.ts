@@ -58,6 +58,27 @@ export function cellPolygon(cell: string): Polygon {
   };
 }
 
+/** The same 64-bit index as a decimal integer, as databases often store it. */
+export function cellInteger(cell: string): bigint {
+  return BigInt(`0x${cell}`);
+}
+
+/** The cell one resolution up containing this one, or null at the coarsest. */
+export function parentCell(cell: string): string | null {
+  const resolution = h3.getResolution(cell);
+  return resolution > MIN_RESOLUTION
+    ? h3.cellToParent(cell, resolution - 1)
+    : null;
+}
+
+/** The cells one resolution down: 7, or 6 under a pentagon. Their union only approximates this cell. */
+export function childCells(cell: string): string[] {
+  const resolution = h3.getResolution(cell);
+  return resolution < MAX_RESOLUTION
+    ? h3.cellToChildren(cell, resolution + 1)
+    : [];
+}
+
 export function estimateCells(bbox: Bbox, resolution: number): number {
   return bboxAreaKm2(bbox) / h3.getHexagonAreaAvg(resolution, h3.UNITS.km2);
 }

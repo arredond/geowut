@@ -4,6 +4,7 @@ import type { GeoJSONStoreFeatures } from "terra-draw";
 import type { Feature, Geometry } from "geojson";
 import {
   DrawController,
+  exportCollection,
   featureDetails,
   featureGeometry,
   featureMeasurements,
@@ -716,5 +717,71 @@ describe("featureDetails", () => {
       ],
     });
     expect(featureDetails(line, "imperial")[0].label).toBe("Length (mi)");
+  });
+});
+
+describe("exportCollection", () => {
+  const add = (...features: Feature[]) =>
+    controller.addFeatures(features).added;
+
+  it("gives pasted features back whole, with their properties", () => {
+    const multi: Geometry = {
+      type: "MultiPolygon",
+      coordinates: [[ring], [ring]],
+    };
+    const snapshot = add(feature(multi, { name: "Islands" }));
+    expect(snapshot).toHaveLength(2);
+    expect(exportCollection(snapshot)).toEqual({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: multi,
+          properties: { name: "Islands" },
+        },
+      ],
+    });
+  });
+
+  it("gives drawn features their own geometry and no properties", () => {
+    const [point] = add(feature({ type: "Point", coordinates: [1, 2] }));
+    expect(exportCollection([point]).features).toEqual([
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [1, 2] },
+        properties: {},
+      },
+    ]);
+  });
+
+  it("splits a pasted feature into its parts once one has been edited", () => {
+    const [first, second] = add(
+      feature({ type: "MultiPolygon", coordinates: [[ring], [ring]] }),
+    );
+    // As an edit leaves it: the part is now its own source of truth.
+    const { sourceGeometry: _, ...rest } = first.properties;
+    const edited = { ...first, properties: rest };
+    const { features } = exportCollection([edited, second]);
+    expect(features.map((f) => f.geometry.type)).toEqual([
+      "Polygon",
+      "Polygon",
+    ]);
+  });
+
+  it("leaves out selection handles and midpoints", () => {
+    const [point] = add(feature({ type: "Point", coordinates: [1, 2] }));
+    const handle = {
+      ...point,
+      id: "handle",
+      properties: { ...point.properties, selectionPoint: true },
+    };
+    const midpoint = {
+      ...point,
+      id: "mid",
+      properties: { ...point.properties, midPoint: true },
+    };
+    expect(exportCollection([point, handle, midpoint]).features).toHaveLength(
+      1,
+    );
   });
 });

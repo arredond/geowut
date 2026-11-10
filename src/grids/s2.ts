@@ -66,6 +66,27 @@ export function cellPolygon(token: string): Polygon {
   };
 }
 
+/** The 64-bit cell ID the token abbreviates, as an unsigned integer. */
+export function cellInteger(token: string): bigint {
+  return s2.cellid.fromToken(token);
+}
+
+/** The cell one level up containing this one, or null at the coarsest level shown. */
+export function parentCell(token: string): string | null {
+  const id = s2.cellid.fromToken(token);
+  return s2.cellid.level(id) > MIN_LEVEL
+    ? s2.cellid.toToken(s2.cellid.immediateParent(id))
+    : null;
+}
+
+/** The four cells one level down, which exactly tile this one. */
+export function childCells(token: string): string[] {
+  const id = s2.cellid.fromToken(token);
+  return s2.cellid.level(id) < MAX_LEVEL
+    ? s2.cellid.children(id).map((child) => s2.cellid.toToken(child))
+    : [];
+}
+
 export function estimateCells(bbox: Bbox, level: number): number {
   const cellAreaKm2 = EARTH_SURFACE_KM2 / (6 * 4 ** level);
   return bboxAreaKm2(bbox) / cellAreaKm2;

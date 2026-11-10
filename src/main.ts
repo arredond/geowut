@@ -1,6 +1,6 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
-import { createMap, setBasemap } from "./map";
+import { basemapStyle, createMap, setBasemap } from "./map";
 import {
   GridLayer,
   GRID_DEFINITIONS,
@@ -13,13 +13,20 @@ import { FeaturePanel } from "./panel";
 import { FeaturePopup } from "./popup";
 import { Toolbar, historyShortcut, isTyping } from "./toolbar";
 import { AddDataModal } from "./addDataModal";
+import type { AddResult } from "./addDataModal";
+import type { Feature } from "geojson";
 import type { GeoJSONStoreFeatures } from "terra-draw";
 import { geometryBbox } from "./geometry";
 import { applyTheme, isDarkBasemap, SettingsStore } from "./settings";
 import type { Basemap } from "./settings";
+import { createGeocoder } from "./geocoder";
+import { datedFilename, downloadText } from "./download";
+import { ICONS } from "./icons";
 import { SettingsPanel } from "./settingsPanel";
 import { GridInfoModal } from "./gridInfo";
 import { CoveragePreview } from "./grids/preview";
+
+const REPO_URL = "https://github.com/arredond/geowut";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const mapContainer = document.querySelector<HTMLDivElement>("#map")!;
@@ -30,7 +37,7 @@ const units = () => settings.get().units;
 
 const { map, scale } = createMap(
   mapContainer,
-  settings.get().basemap,
+  basemapStyle(settings.get()),
   settings.get().units,
 );
 
@@ -52,6 +59,8 @@ const featurePanel = new FeaturePanel(
   }),
   units,
   (cells) => coveragePreview.show(cells),
+  // Its parent and child cells can be added as features.
+  (features) => addToMap(features),
 );
 
 // Covering labels and previews follow the grid levels. Grids change level together on zoom: one refresh for all.
@@ -118,14 +127,23 @@ const toolbar = new Toolbar(
     deleteAll: () => draw.deleteAll(),
     undo: () => draw.undo(),
     redo: () => draw.redo(),
+    exportAll: () =>
+      downloadText(
+        datedFilename("geojson"),
+        JSON.stringify(draw.exportFeatures(), null, 2),
+        "application/geo+json",
+      ),
   },
   units(),
 );
 
-settings.subscribe(({ units, theme, basemap }, changed) => {
+settings.subscribe(({ units, theme, basemap, customBasemap }, changed) => {
   if (changed.includes("theme")) applyTheme(theme);
-  if (changed.includes("basemap")) {
-    setBasemap(map, basemap);
+  if (
+    changed.includes("basemap") ||
+    (basemap === "custom" && changed.includes("customBasemap"))
+  ) {
+    setBasemap(map, basemapStyle({ basemap, customBasemap }));
     matchBasemap(basemap);
   }
   if (changed.includes("units")) {
@@ -136,7 +154,8 @@ settings.subscribe(({ units, theme, basemap }, changed) => {
   }
 });
 
-const addDataModal = new AddDataModal(app, (features) => {
+/** Draws features and fits the map to them, for "Add data", pasting and search results. */
+function addToMap(features: Feature[]): AddResult {
   const { added, rejected } = draw.addFeatures(features);
   if (added.length === 0) return { added: 0, rejected };
 
@@ -152,6 +171,17 @@ const addDataModal = new AddDataModal(app, (features) => {
     { padding: 60, maxZoom: 16 },
   );
   return { added: added.length, rejected };
+}
+
+const addDataModal = new AddDataModal(app, addToMap);
+
+// Pasting anywhere but a text field adds the data, as "Add data" would.
+document.addEventListener("paste", (e) => {
+  if (isTyping(e) || !addDataModal.isHidden()) return;
+  const text = e.clipboardData?.getData("text/plain");
+  if (!text?.trim()) return;
+  e.preventDefault();
+  addDataModal.addPasted(text);
 });
 
 document.addEventListener("keydown", (e) => {
@@ -173,6 +203,11 @@ map.on("load", () => {
 
   new GridControl(app, gridLayers, () => gridInfo.show());
 
+  const search = document.createElement("div");
+  search.className = "search";
+  app.appendChild(search);
+  createGeocoder(map, search, addToMap);
+
   const toolbar = document.createElement("div");
   toolbar.className = "toolbar";
 
@@ -184,6 +219,17 @@ map.on("load", () => {
 
   toolbar.appendChild(addDataButton);
   new SettingsPanel(toolbar, settings);
+
+  const repoLink = document.createElement("a");
+  repoLink.className = "toolbar-button icon-only";
+  repoLink.href = REPO_URL;
+  repoLink.target = "_blank";
+  repoLink.rel = "noopener noreferrer";
+  repoLink.title = "GeoWut on GitHub";
+  repoLink.setAttribute("aria-label", "GeoWut on GitHub");
+  repoLink.innerHTML = ICONS.github;
+  toolbar.appendChild(repoLink);
+
   app.appendChild(toolbar);
 });
 

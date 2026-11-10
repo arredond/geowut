@@ -57,7 +57,47 @@ describe("SettingsPanel", () => {
       "positron",
       "dark",
       "fiord",
+      "custom",
     ]);
+  });
+
+  describe("custom basemap", () => {
+    const customBasemap = {
+      url: "https://tiles.example.com/{z}/{x}/{y}.png",
+      source: {
+        tiles: ["https://tiles.example.com/{z}/{x}/{y}.png"],
+        scheme: "xyz" as const,
+      },
+    };
+    const form = () =>
+      document.querySelector<HTMLFormElement>(".custom-basemap")!;
+    const input = () => form().querySelector("input")!;
+
+    it("asks for a URL before switching", () => {
+      expect(form().hidden).toBe(true);
+      radio("basemap", "custom").click();
+      expect(form().hidden).toBe(false);
+      expect(store.get().basemap).toBe("liberty");
+      expect(radio("basemap", "liberty").checked).toBe(true);
+    });
+
+    it("switches once a URL is used", () => {
+      radio("basemap", "custom").click();
+      input().value = customBasemap.url;
+      form().requestSubmit();
+      expect(store.get()).toMatchObject({ basemap: "custom", customBasemap });
+      expect(radio("basemap", "custom").checked).toBe(true);
+    });
+
+    it("goes back to a saved one straight away, and hides it for other basemaps", () => {
+      store.set({ basemap: "custom", customBasemap });
+      radio("basemap", "dark").click();
+      expect(form().hidden).toBe(true);
+      radio("basemap", "custom").click();
+      expect(store.get().basemap).toBe("custom");
+      expect(form().hidden).toBe(false);
+      expect(input().value).toBe(customBasemap.url);
+    });
   });
 
   it("applies a pick straight away, and stays open for the next", () => {

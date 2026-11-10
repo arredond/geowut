@@ -1,3 +1,5 @@
+import { isCustomBasemap } from "./customBasemap";
+import type { CustomBasemap } from "./customBasemap";
 import type { Units } from "./units";
 
 export type Theme = "light" | "dark" | "auto";
@@ -10,24 +12,29 @@ export const BASEMAPS = [
   { id: "dark", label: "Dark", dark: true },
   { id: "fiord", label: "Fiord", dark: true },
 ] as const;
-export type Basemap = (typeof BASEMAPS)[number]["id"];
+export type OpenFreeMapStyle = (typeof BASEMAPS)[number]["id"];
+/** Custom is a raster tile URL of the user's own, kept in customBasemap. */
+export type Basemap = OpenFreeMapStyle | "custom";
 
+/** We can't tell what a custom basemap looks like, so it gets the light treatment. */
 export const isDarkBasemap = (basemap: Basemap) =>
-  BASEMAPS.find((b) => b.id === basemap)!.dark;
+  BASEMAPS.find((b) => b.id === basemap)?.dark ?? false;
 
-export const basemapStyleUrl = (basemap: Basemap) =>
+export const basemapStyleUrl = (basemap: OpenFreeMapStyle) =>
   `https://tiles.openfreemap.org/styles/${basemap}`;
 
 export interface Settings {
   units: Units;
   theme: Theme;
   basemap: Basemap;
+  customBasemap: CustomBasemap | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   units: "metric",
   theme: "auto",
   basemap: "liberty",
+  customBasemap: null,
 };
 
 const STORAGE_KEY = "geowut:settings";
@@ -43,6 +50,9 @@ function load(): Settings {
   } catch {
     // Storage blocked or garbled: start from the defaults.
   }
+  const customBasemap = isCustomBasemap(saved.customBasemap)
+    ? saved.customBasemap
+    : DEFAULT_SETTINGS.customBasemap;
   return {
     units: isOneOf(saved.units, ["metric", "imperial"] as const)
       ? saved.units
@@ -50,12 +60,15 @@ function load(): Settings {
     theme: isOneOf(saved.theme, ["light", "dark", "auto"] as const)
       ? saved.theme
       : DEFAULT_SETTINGS.theme,
-    basemap: isOneOf(
-      saved.basemap,
-      BASEMAPS.map((b) => b.id),
-    )
-      ? saved.basemap
-      : DEFAULT_SETTINGS.basemap,
+    basemap:
+      isOneOf(
+        saved.basemap,
+        BASEMAPS.map((b) => b.id),
+      ) ||
+      (saved.basemap === "custom" && customBasemap)
+        ? (saved.basemap as Basemap)
+        : DEFAULT_SETTINGS.basemap,
+    customBasemap,
   };
 }
 

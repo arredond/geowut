@@ -15,6 +15,7 @@ import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoJSONStoreFeatures, GeoJSONStoreGeometries } from "terra-draw";
 import type {
   Feature,
+  FeatureCollection,
   GeoJsonProperties,
   Geometry,
   Polygon,
@@ -201,6 +202,14 @@ export class DrawController {
     this.callbacks.onFeaturesRemoved(); // Whatever was open may be gone or out of date.
   }
 
+  /**
+   * Every feature as GeoJSON, as it was given: a pasted geometry the map holds in parts
+   * comes back whole (unless a part has since been edited), with its pasted properties.
+   */
+  exportFeatures(): FeatureCollection {
+    return exportCollection(this.terraDraw.getSnapshot());
+  }
+
   /** Add externally-sourced features (from pasted WKT/GeoJSON) to the store. */
   addFeatures(features: Feature[]): {
     added: GeoJSONStoreFeatures[];
@@ -372,6 +381,42 @@ function toStoreFeatures({
       ...(drawable.length > 1 && { sourceId }),
     },
   }));
+}
+
+export function exportCollection(
+  snapshot: GeoJSONStoreFeatures[],
+): FeatureCollection {
+  // Selection handles and midpoints live in the store too; they aren't features.
+  const shapes = snapshot.filter(
+    (f) => !f.properties.selectionPoint && !f.properties.midPoint,
+  );
+  const partsBySource = new Map<string, GeoJSONStoreFeatures[]>();
+  for (const feature of shapes) {
+    const sourceId = feature.properties.sourceId as string | undefined;
+    if (sourceId)
+      partsBySource.set(sourceId, [
+        ...(partsBySource.get(sourceId) ?? []),
+        feature,
+      ]);
+  }
+
+  const features: Feature[] = [];
+  const done = new Set<string>();
+  for (const feature of shapes) {
+    const sourceId = feature.properties.sourceId as string | undefined;
+    const parts = sourceId ? partsBySource.get(sourceId)! : [feature];
+    const whole = parts.every((part) => part.properties.sourceGeometry);
+    if (sourceId && whole) {
+      if (done.has(sourceId)) continue;
+      done.add(sourceId);
+    }
+    features.push({
+      type: "Feature",
+      geometry: whole ? featureGeometry(feature) : feature.geometry,
+      properties: featureProperties(feature) ?? {},
+    });
+  }
+  return { type: "FeatureCollection", features };
 }
 
 /** The geometry to report for a feature: what was pasted, if the map only holds a simplified version of it. */

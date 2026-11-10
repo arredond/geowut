@@ -24,6 +24,9 @@
     "vitest": "^4.1.12"
   },
   "dependencies": {
+    "@camptocamp/ogc-client": "^2.0.2",
+    "@maplibre/maplibre-gl-geocoder": "^1.9.4",
+    "@terraformer/arcgis": "^2.2.2",
     "@terraformer/wkt": "^2.2.2",
     "geographiclib-geodesic": "^2.2.0",
     "h3-js": "^4.5.0",
