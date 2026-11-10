@@ -24,6 +24,7 @@ import type {
 import { circleCenter, measureGeometry } from "./geometry";
 import { Measurer, MEASURE_TOOLS } from "./measure";
 import type { Measurement, MeasureTool } from "./measure";
+import type { DetailRow } from "./panel";
 import type { Units } from "./units";
 
 type JSONObject = NonNullable<GeoJSONStoreFeatures["properties"][string]>;
@@ -455,13 +456,21 @@ export function featureProperties(
 export function featureDetails(
   feature: GeoJSONStoreFeatures,
   units: Units,
-): { label: string; value: string }[] {
+): DetailRow[] {
   const entries = Object.entries({
     ...featureMeasurements(feature, units),
     ...featureProperties(feature),
   });
-  return entries.map(([label, value]) => ({
-    label,
-    value: typeof value === "object" ? JSON.stringify(value) : String(value),
-  }));
+  return entries.map(([label, value]) => {
+    const text =
+      typeof value === "object" ? JSON.stringify(value) : String(value);
+    return { label, value: text, ...osmLink(label, text) };
+  });
+}
+
+/** An `osm` reference such as relation/5326784, as search results carry, links to that object on OpenStreetMap. */
+function osmLink(label: string, value: string): Pick<DetailRow, "href"> {
+  return label === "osm" && /^(node|way|relation)\/\d+$/.test(value)
+    ? { href: `https://www.openstreetmap.org/${value}` }
+    : {};
 }

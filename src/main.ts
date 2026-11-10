@@ -56,6 +56,7 @@ const featurePanel = new FeaturePanel(
     h3: gridLayers.find((l) => l.def.id === "h3")!.resolution,
     quadkey: gridLayers.find((l) => l.def.id === "quadkey")!.resolution,
     s2: gridLayers.find((l) => l.def.id === "s2")!.resolution,
+    a5: gridLayers.find((l) => l.def.id === "a5")!.resolution,
   }),
   units,
   (cells) => coveragePreview.show(cells),

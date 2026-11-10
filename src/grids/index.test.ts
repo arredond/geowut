@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { cellDetails, gridCellAtPoint, GridLayer, GRID_DEFINITIONS } from ".";
+import {
+  cellDetails,
+  gridCellAtPoint,
+  gridIcon,
+  GridLayer,
+  GRID_DEFINITIONS,
+} from ".";
 import type { GridCellFeature } from ".";
 import { cellPolygon, coverBbox } from "./quadkey";
 
@@ -343,6 +349,22 @@ describe("cellDetails", () => {
     expect(labels("8001fffffffffff")).not.toContain("Parent");
     expect(labels("8f2830828052d25")).not.toContainEqual(
       expect.stringMatching(/^Children/),
+    );
+  });
+});
+
+describe("grid names and icons", () => {
+  it("names grids plainly, each with its own cell shape", () => {
+    expect(GRID_DEFINITIONS.map((def) => def.label)).toEqual([
+      "H3",
+      "Quadkey",
+      "S2",
+      "A5",
+    ]);
+    const shapes = GRID_DEFINITIONS.map((def) => def.shape);
+    expect(new Set(shapes).size).toBe(shapes.length);
+    expect(gridIcon(GRID_DEFINITIONS[0])).toMatch(
+      /^<svg class="grid-icon"[^>]*><polygon points="[^"]+"\/><\/svg>$/,
     );
   });
 });

@@ -85,6 +85,11 @@ export function cellPolygon(quadkey: string): Polygon {
   };
 }
 
+/** A quadkey's zoom is its number of digits. */
+export function cellLevel(quadkey: string): number {
+  return quadkey.length;
+}
+
 /** The tile one zoom up containing this one: the quadkey minus its last digit. Null at zoom 1, as zoom 0's whole world has no quadkey. */
 export function parentCell(quadkey: string): string | null {
   return quadkey.length > Math.max(MIN_ZOOM, 1) ? quadkey.slice(0, -1) : null;

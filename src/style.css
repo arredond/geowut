@@ -11,6 +11,7 @@
   --hover: #eef2f8;
   --pressed: #dfeaff;
   --disabled-bg: #f3f4f6;
+  --switch-off: #cdd3da;
   --danger: #d92d20;
   --danger-bg: #fdecea;
   --overlay: rgba(20, 24, 30, 0.35);
@@ -37,6 +38,7 @@
   --hover: #2c333c;
   --pressed: #22385c;
   --disabled-bg: #252a31;
+  --switch-off: #4a525d;
   --danger: #f97066;
   --danger-bg: #3d2220;
   --overlay: rgba(0, 0, 0, 0.55);
@@ -56,6 +58,7 @@
     --hover: #2c333c;
     --pressed: #22385c;
     --disabled-bg: #252a31;
+    --switch-off: #4a525d;
     --danger: #f97066;
     --danger-bg: #3d2220;
     --overlay: rgba(0, 0, 0, 0.55);
@@ -114,29 +117,43 @@ body,
   left: 12px;
   bottom: 30px;
   z-index: 5;
+  width: 252px;
+  padding: 10px 8px 8px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--panel-shadow);
-  padding: 10px 12px;
-  min-width: 220px;
 }
 
 .grid-header {
   display: flex;
   align-items: center;
   gap: 4px;
+  padding: 0 4px 0 6px;
 }
 
 .grid-rows {
-  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+/* Folded down to its header (display: flex would otherwise win over [hidden]) */
+.grid-rows[hidden] {
+  display: none;
+}
+
+.grid-control.collapsed {
+  padding-bottom: 10px;
 }
 
 .grid-control h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
 }
 
@@ -144,44 +161,188 @@ body,
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 0;
+  padding: 5px 6px;
+  border-radius: 8px;
+  /* A grid's own switch takes its color. */
+  --switch-on: var(--grid-color);
+}
+
+.grid-row:hover {
+  background: var(--hover);
 }
 
 .grid-row-label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex: 1;
+  min-width: 0;
   cursor: pointer;
-  font-size: 14px;
-  color: var(--grid-color, var(--text));
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
 }
 
-.grid-row-auto {
+/* A cell in miniature, in the grid's color: outlined and tinted like the grid on the map */
+.grid-swatch {
+  display: flex;
+  flex: none;
+  color: var(--grid-color);
+}
+
+.grid-icon {
+  display: block;
+  flex: none;
+}
+
+.grid-row-level {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
+  gap: 6px;
+}
+
+/* Auto: a pill, highlighted while on */
+.grid-row-auto {
+  position: relative;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
   color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
   cursor: pointer;
+  user-select: none;
+}
+
+.grid-row-auto input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.grid-row-auto:has(input:checked) {
+  color: var(--accent);
+  background: var(--pressed);
+  border-color: transparent;
+}
+
+.grid-row-auto:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Resolution: − number + */
+.grid-stepper {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.grid-stepper.too-many-cells {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
+.grid-step {
+  width: 18px;
+  height: 100%;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.grid-step:hover {
+  color: var(--text);
+  background: var(--hover);
 }
 
 .grid-row-resolution {
-  width: 3.5em;
-  padding: 2px 4px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  width: 2.2em;
+  height: 100%;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
+.grid-row-resolution::-webkit-inner-spin-button,
+.grid-row-resolution::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Set by the zoom while auto is on: shown, but quieter */
 .grid-row-resolution:disabled {
   color: var(--text-muted);
-  background: var(--disabled-bg);
 }
 
-.grid-row-resolution.too-many-cells {
-  border-color: var(--danger);
-  outline: 1px solid var(--danger);
+.grid-row-resolution:focus-visible {
+  outline: none;
+  background: var(--hover);
+}
+
+/* Switches: checkboxes drawn as toggles */
+.switch {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 16px;
+  margin: 0;
+  background: var(--switch-off);
+  border-radius: 999px;
+  cursor: pointer;
+  appearance: none;
+  transition: background-color 0.15s;
+}
+
+.switch::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s;
+}
+
+.switch:checked {
+  background: var(--switch-on, var(--accent));
+}
+
+.switch:checked::before {
+  transform: translateX(12px);
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch,
+  .switch::before {
+    transition: none;
+  }
 }
 
 /* Feature card, bottom-right: clear of the toolbar and map controls above, and of the attribution below.
@@ -378,6 +539,116 @@ body,
   border: 1px solid var(--border);
   border-radius: 6px;
   resize: vertical;
+}
+
+/* "What can I paste?": folded away under the text box, scrolling within when open */
+.formats-help {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.formats-help summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  color: var(--accent);
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.formats-help summary::-webkit-details-marker {
+  display: none;
+}
+
+.formats-help summary svg {
+  width: 15px;
+  height: 15px;
+}
+
+.formats-help summary:hover {
+  text-decoration: underline;
+}
+
+.formats-body {
+  max-height: min(300px, 40vh);
+  overflow-y: auto;
+  margin-top: 8px;
+  padding: 4px 12px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+}
+
+.formats-body h3 {
+  margin: 12px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.modal .formats-note {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.formats-body dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.formats-body dt {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.formats-body dd {
+  /* Grid items won't shrink below their longest example otherwise. */
+  min-width: 0;
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.format-example {
+  display: inline-block;
+  max-width: 100%;
+  margin: 2px 0;
+  padding: 1px 6px;
+  overflow: hidden;
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.format-example:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.formats-body ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.formats-body li + li {
+  margin-top: 4px;
 }
 
 .modal-error {
@@ -833,8 +1104,16 @@ a.toolbar-button {
   font-weight: 600;
 }
 
-.segmented > button[aria-selected="true"] {
-  color: var(--grid-color, var(--text));
+/* Grid tabs: the icon carries the grid's color */
+.segmented > button:has(.grid-icon) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.segmented > button .grid-icon {
+  color: var(--grid-color);
 }
 
 .segmented input,
@@ -882,6 +1161,23 @@ a.toolbar-button {
   margin-top: -4px;
   border-radius: 50%;
   background: var(--accent);
+}
+
+/* Licenses, at the foot of the settings */
+.settings-footer {
+  margin: -4px 0 0;
+  padding-top: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+}
+
+.settings-footer a {
+  color: inherit;
+}
+
+.settings-footer a:hover {
+  color: var(--accent);
 }
 
 /* Custom basemap URL, under the Custom option */
@@ -954,12 +1250,40 @@ a.toolbar-button {
 /* Grid control header: title, info, all-grids toggle */
 .grid-header-title {
   cursor: pointer;
+  user-select: none;
+}
+
+.grid-collapse-button {
+  width: 24px;
+  height: 24px;
+}
+
+.grid-collapse-button svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.15s;
+}
+
+/* Down to fold the card away, up to bring it back */
+.grid-control.collapsed .grid-collapse-button svg {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grid-collapse-button svg {
+    transition: none;
+  }
 }
 
 .grid-header .grid-info-button {
   margin-right: auto;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
+}
+
+.grid-header .grid-info-button svg {
+  width: 15px;
+  height: 15px;
 }
 
 /* Grid cell sizes */
@@ -1077,6 +1401,21 @@ a.toolbar-button {
   text-overflow: ellipsis;
   white-space: nowrap;
   word-break: normal;
+}
+
+.details-table td a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.details-table td a:hover {
+  text-decoration: underline;
+}
+
+/* Off to another site */
+.details-table td a::after {
+  content: " ↗";
+  font-size: 0.85em;
 }
 
 /* The copy button cell: no wider than its button */

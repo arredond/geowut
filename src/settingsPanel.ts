@@ -64,6 +64,7 @@ export class SettingsPanel {
       this.segmented(UNIT_CHOICE),
       this.segmented(THEME_CHOICE),
       this.basemaps(),
+      licensesFooter(),
     );
 
     wrapper.append(this.button, this.popover);
@@ -156,4 +157,28 @@ export class SettingsPanel {
       radio.checked = settings[key] === radio.value;
     }
   }
+}
+
+const LICENSE_URL = "https://github.com/arredond/geowut/blob/main/LICENSE";
+/** Written next to the site by the build, from the packages bundled. */
+const THIRD_PARTY_LICENSES_URL = "third-party-licenses.txt";
+
+/** GeoWut's license, and those of the open-source packages it's built from. */
+function licensesFooter(): HTMLElement {
+  const footer = document.createElement("p");
+  footer.className = "settings-footer";
+  const link = (href: string, text: string) => {
+    const a = document.createElement("a");
+    a.href = href;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = text;
+    return a;
+  };
+  footer.append(
+    link(LICENSE_URL, "MIT licensed"),
+    " · ",
+    link(THIRD_PARTY_LICENSES_URL, "Third-party licenses"),
+  );
+  return footer;
 }

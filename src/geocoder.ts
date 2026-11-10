@@ -202,6 +202,7 @@ export function nominatimOutlines(): (
         name: place.place_name,
         ...(category !== undefined && { category }),
         ...(type !== undefined && { type }),
+        // The feature panel links it to openstreetmap.org.
         ...(osm_type !== undefined && { osm: `${osm_type}/${osm_id}` }),
       },
     };

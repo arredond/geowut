@@ -3,17 +3,20 @@ import type { Feature, FeatureCollection, Polygon } from "geojson";
 import type { DetailRow } from "../panel";
 import type { Bbox, CellStats, GridCellFeature } from "./types";
 import { getPaddedViewportBbox } from "../map";
+import * as a5Grid from "./a5";
 import * as h3Grid from "./h3";
 import * as quadkeyGrid from "./quadkey";
 import * as s2Grid from "./s2";
 import { formatArea, formatLength } from "../units";
 import type { Units } from "../units";
 
-export type GridId = "h3" | "quadkey" | "s2";
+export type GridId = "h3" | "quadkey" | "s2" | "a5";
 
 interface GridDefinition {
   id: GridId;
   label: string;
+  /** The cell's shape, as SVG drawn in a 16×16 box, for the grid's icon. */
+  shape: string;
   color: string;
   minResolution: number;
   maxResolution: number;
@@ -28,6 +31,8 @@ interface GridDefinition {
   levelStatsNote: string;
   cellStats: (id: string) => CellStats;
   cellPolygon: (id: string) => Polygon;
+  /** The level of a cell, from its ID. */
+  cellLevel: (id: string) => number;
   /** The cell one level up containing this one, or null at the coarsest. */
   parentCell: (id: string) => string | null;
   /** The cells one level down, or none at the finest. */
@@ -36,14 +41,21 @@ interface GridDefinition {
   cellInteger?: (id: string) => bigint;
 }
 
+/** A grid's cell shape in its color, outlined and tinted like its cells on the map. */
+export function gridIcon(def: Pick<GridDefinition, "shape">): string {
+  return `<svg class="grid-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">${def.shape}</svg>`;
+}
+
 /** Above this many cells a grid isn't worth computing or drawing: it would hang the page and be unreadable anyway. */
 export const MAX_GRID_CELLS = 10_000;
 
 export const GRID_DEFINITIONS: GridDefinition[] = [
   {
     id: "h3",
-    label: "H3 cells",
-    color: "#e4572e",
+    label: "H3",
+    shape:
+      '<polygon points="8,1.5 13.6,4.75 13.6,11.25 8,14.5 2.4,11.25 2.4,4.75"/>',
+    color: "#2a6fdb",
     minResolution: h3Grid.MIN_RESOLUTION,
     maxResolution: h3Grid.MAX_RESOLUTION,
     resolutionForZoom: h3Grid.resolutionForZoom,
@@ -55,14 +67,18 @@ export const GRID_DEFINITIONS: GridDefinition[] = [
       "Averages over all cells: the hexagons and the 12 pentagons of every resolution.",
     cellStats: h3Grid.cellStats,
     cellPolygon: h3Grid.cellPolygon,
+    cellLevel: h3Grid.cellLevel,
     parentCell: h3Grid.parentCell,
     childCells: h3Grid.childCells,
     cellInteger: h3Grid.cellInteger,
   },
   {
     id: "quadkey",
-    label: "Quadkeys",
-    color: "#2e8b57",
+    label: "Quadkey",
+    // A tile split in four, as quadkeys nest.
+    shape:
+      '<rect x="2" y="2" width="12" height="12" rx="0.5"/><path d="M8 2v12M2 8h12" stroke-width="1"/>',
+    color: "#8a4fd0",
     minResolution: quadkeyGrid.MIN_ZOOM,
     maxResolution: quadkeyGrid.MAX_ZOOM,
     resolutionForZoom: quadkeyGrid.resolutionForZoom,
@@ -74,13 +90,17 @@ export const GRID_DEFINITIONS: GridDefinition[] = [
       "Tiles on the equator, the largest. Away from it they shrink with the cosine of latitude: at 60°, edges are half as long and areas a quarter.",
     cellStats: quadkeyGrid.cellStats,
     cellPolygon: quadkeyGrid.cellPolygon,
+    cellLevel: quadkeyGrid.cellLevel,
     parentCell: quadkeyGrid.parentCell,
     childCells: quadkeyGrid.childCells,
   },
   {
     id: "s2",
-    label: "S2 cells",
-    color: "#3468c0",
+    label: "S2",
+    // A quadrilateral bulging as S2's do, being cube faces projected onto the sphere.
+    shape:
+      '<path d="M2.5 3Q8 1.6 13.5 2.6Q14.6 8 13.5 13.4Q8 14.6 2.5 13.5Q1.4 8 2.5 3Z"/>',
+    color: "#d63a3a",
     minResolution: s2Grid.MIN_LEVEL,
     maxResolution: s2Grid.MAX_LEVEL,
     resolutionForZoom: s2Grid.resolutionForZoom,
@@ -92,9 +112,32 @@ export const GRID_DEFINITIONS: GridDefinition[] = [
       "Averages over all cells. The largest cells of a level are about twice the area of the smallest.",
     cellStats: s2Grid.cellStats,
     cellPolygon: s2Grid.cellPolygon,
+    cellLevel: s2Grid.cellLevel,
     parentCell: s2Grid.parentCell,
     childCells: s2Grid.childCells,
     cellInteger: s2Grid.cellInteger,
+  },
+  {
+    id: "a5",
+    label: "A5",
+    // Traced from a real cell (at 115°W 8°S): A5's pentagons have equal edges but uneven angles.
+    shape: '<polygon points="1.8,13.9 9.1,14.2 14.2,8.3 10.7,1.8 4.8,6.7"/>',
+    color: "#1f9d55",
+    minResolution: a5Grid.MIN_RESOLUTION,
+    maxResolution: a5Grid.MAX_RESOLUTION,
+    resolutionForZoom: a5Grid.resolutionForZoom,
+    estimateCells: a5Grid.estimateCells,
+    coverBbox: a5Grid.coverBbox,
+    resolutionName: "Resolution",
+    levelStats: a5Grid.levelStats,
+    levelStatsNote:
+      "Every cell of a resolution has exactly the same area. Edge lengths vary by about ±10% around the average.",
+    cellStats: a5Grid.cellStats,
+    cellPolygon: a5Grid.cellPolygon,
+    cellLevel: a5Grid.cellLevel,
+    parentCell: a5Grid.parentCell,
+    childCells: a5Grid.childCells,
+    cellInteger: a5Grid.cellInteger,
   },
 ];
 
@@ -196,7 +239,7 @@ export function cellDetails({
 }
 
 /** A cell as a feature to draw, saying which grid and level it belongs to. */
-function cellFeature(
+export function cellFeature(
   def: GridDefinition,
   id: string,
   level: number,

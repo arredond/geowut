@@ -2,6 +2,7 @@ import * as h3 from "h3-js";
 import { describe, expect, it } from "vitest";
 import type { LineString, MultiPolygon, Point, Polygon } from "geojson";
 import {
+  a5Coverage,
   h3Coverage,
   quadkeyCoverage,
   s2Coverage,
@@ -259,11 +260,38 @@ describe("s2Coverage", () => {
   });
 });
 
+describe("a5Coverage", () => {
+  it("covers points, lines and polygons, without repeats", () => {
+    const point: Point = { type: "Point", coordinates: [-3.95, 40.05] };
+    const cells = a5Coverage(
+      {
+        type: "GeometryCollection",
+        geometries: [point, line, polygon],
+      },
+      10,
+    );
+    expect(new Set(cells).size).toBe(cells.length);
+    expect(cells).toEqual(expect.arrayContaining(a5Coverage(point, 10)));
+    expect(cells).toEqual(expect.arrayContaining(a5Coverage(line, 10)));
+    expect(cells.length).toBeGreaterThan(a5Coverage(polygon, 10).length - 1);
+  });
+
+  it("covers a polygon with every cell it touches", () => {
+    // A cell's worth of polygon, with no cell center inside, still gets the cells under it.
+    const tiny: Polygon = {
+      type: "Polygon",
+      coordinates: [square(-3.70001, 40.40001, 0.00002)],
+    };
+    expect(a5Coverage(tiny, 8)).toHaveLength(1);
+  });
+});
+
 describe("oversized coverings", () => {
   it("refuses them instead of hanging the page", () => {
     expect(() => h3Coverage(polygon, 15)).toThrow(TooManyCellsError);
     expect(() => quadkeyCoverage(polygon, 23)).toThrow(TooManyCellsError);
     expect(() => s2Coverage(polygon, 24)).toThrow(TooManyCellsError);
+    expect(() => a5Coverage(polygon, 30)).toThrow(TooManyCellsError);
   });
 
   it("judges lines by their length, not their bbox", () => {
@@ -282,5 +310,6 @@ describe("oversized coverings", () => {
     expect(h3Coverage(point, 15)).toHaveLength(1);
     expect(quadkeyCoverage(point, 23)).toHaveLength(1);
     expect(s2Coverage(point, 24)).toHaveLength(1);
+    expect(a5Coverage(point, 30)).toHaveLength(1);
   });
 });

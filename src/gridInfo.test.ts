@@ -32,7 +32,7 @@ describe("GridInfoModal", () => {
     expect(overlay().hidden).toBe(true);
     modal.show();
     expect(overlay().hidden).toBe(false);
-    expect(tab("H3 cells").getAttribute("aria-selected")).toBe("true");
+    expect(tab("H3").getAttribute("aria-selected")).toBe("true");
     expect(document.querySelector(".grid-info-table th")!.textContent).toBe(
       "Resolution",
     );
@@ -46,8 +46,8 @@ describe("GridInfoModal", () => {
 
   it("switches grids with the tabs", () => {
     modal.show();
-    tab("S2 cells").click();
-    expect(tab("S2 cells").getAttribute("aria-selected")).toBe("true");
+    tab("S2").click();
+    expect(tab("S2").getAttribute("aria-selected")).toBe("true");
     expect(cells(rows()[0])[0]).toBe("1");
     expect(rows()).toHaveLength(24);
     expect(document.querySelector(".grid-info-note")!.textContent).toMatch(

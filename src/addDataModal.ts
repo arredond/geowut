@@ -1,5 +1,7 @@
 import { wktToGeoJSON } from "@terraformer/wkt";
 import { arcgisToFeatures, isArcGIS, UnsupportedDataError } from "./arcgis";
+import { buildFormatsHelp } from "./addDataFormats";
+import { parseCellIds } from "./cellIds";
 import type { Feature, GeoJSON, Geometry } from "geojson";
 
 export interface AddResult {
@@ -35,7 +37,7 @@ export class AddDataModal {
 
     const hint = document.createElement("p");
     hint.textContent =
-      "Paste WKT, GeoJSON, Esri JSON, a bounding box (xmin ymin xmax ymax, as in GDAL's -te or ogrinfo's Extent) or lat, lng pairs (one per line).";
+      "Paste geometries (GeoJSON, WKT, Esri JSON), bounding boxes, coordinates or cell IDs.";
     dialog.appendChild(hint);
 
     this.textarea = document.createElement("textarea");
@@ -43,6 +45,14 @@ export class AddDataModal {
     this.textarea.placeholder =
       'POINT (-3 40)\n{"type":"Point","coordinates":[-3,40]}\n-3.8 40.3 -3.5 40.6\n40.4168, -3.7038';
     dialog.appendChild(this.textarea);
+
+    dialog.appendChild(
+      buildFormatsHelp((example) => {
+        this.textarea.value = example;
+        this.error.hidden = true;
+        this.textarea.focus();
+      }),
+    );
 
     this.error = document.createElement("p");
     this.error.className = "modal-error";
@@ -132,7 +142,7 @@ export class AddDataModal {
       return {
         result: "failed",
         message:
-          "Could not parse that as WKT, GeoJSON, Esri JSON, a bounding box or coordinates.",
+          "Could not parse that as WKT, GeoJSON, Esri JSON, a bounding box, coordinates or cell IDs.",
       };
     if (rejected > 0)
       return {
@@ -151,7 +161,8 @@ export function parseFeatures(text: string): Feature[] {
   } catch {
     // Not JSON, fall through to WKT.
   }
-  if (json !== undefined) {
+  // Bare numbers and strings are JSON too, but read better as cell IDs and the like.
+  if (json !== undefined && typeof json === "object") {
     if (isBboxArray(json)) {
       const bbox = bboxFeature(json);
       return bbox ? [bbox] : [];
@@ -170,7 +181,9 @@ export function parseFeatures(text: string): Feature[] {
     // Not WKT, fall through to bounding boxes and coordinates.
   }
 
-  return parseCoordinateLines(text);
+  const coordinates = parseCoordinateLines(text);
+  if (coordinates.length > 0) return coordinates;
+  return parseCellIds(text) ?? [];
 }
 
 const isBboxArray = (value: unknown): value is number[] =>

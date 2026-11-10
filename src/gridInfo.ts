@@ -1,3 +1,4 @@
+import { gridIcon } from "./grids";
 import type { GridLayer } from "./grids";
 import { ICONS } from "./icons";
 import { formatArea, formatLength } from "./units";
@@ -56,7 +57,8 @@ export class GridInfoModal {
       const tab = document.createElement("button");
       tab.type = "button";
       tab.setAttribute("role", "tab");
-      tab.textContent = layer.def.label;
+      tab.innerHTML = gridIcon(layer.def);
+      tab.append(layer.def.label);
       tab.style.setProperty("--grid-color", layer.def.color);
       tab.addEventListener("click", () => {
         this.selected = layer;

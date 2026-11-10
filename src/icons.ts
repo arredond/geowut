@@ -33,6 +33,7 @@ export const ICONS = {
   ),
   check: icon('<path d="m5 12 5 5 9-10"/>'),
   plus: icon('<path d="M12 5v14M5 12h14"/>'),
+  chevron: icon('<path d="m6 9 6 6 6-6"/>'),
   download: icon('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'),
   eye: icon(
     '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',

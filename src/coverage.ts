@@ -2,6 +2,7 @@ import * as h3 from "h3-js";
 import { s2, geojson as s2geojson } from "s2js";
 import type { Geometry, Position } from "geojson";
 import { geometryBbox, lengthKm } from "./geometry";
+import * as a5Grid from "./grids/a5";
 import * as h3Grid from "./grids/h3";
 import * as quadkey from "./grids/quadkey";
 import * as s2Grid from "./grids/s2";
@@ -168,4 +169,19 @@ export function s2Coverage(geometry: Geometry, level: number): string[] {
   });
   const cellUnion = coverer.covering(s2Ready(geometry));
   return cellUnion.map((id) => s2.cellid.toToken(id));
+}
+
+/** A5 cell IDs of every cell the geometry touches, at the given resolution. */
+export function a5Coverage(geometry: Geometry, resolution: number): string[] {
+  const { points, lines, polygons } = parts(geometry);
+  assertCoverable(
+    { points, lines, polygons },
+    { bbox: a5Grid.estimateCells, line: a5Grid.estimateLineCells },
+    resolution,
+  );
+  return union(
+    points.map((point) => a5Grid.pointCell(point, resolution)),
+    ...lines.map((line) => a5Grid.lineCells(line, resolution)),
+    ...polygons.map((polygon) => a5Grid.polygonCells(polygon, resolution)),
+  );
 }

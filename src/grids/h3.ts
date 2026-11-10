@@ -1,13 +1,11 @@
 import * as h3 from "h3-js";
 import { bboxAreaKm2 } from "../geometry";
 import type { Polygon, Position } from "geojson";
+import { lngSlices } from "./bbox";
 import type { Bbox, CellStats, GridCellFeature } from "./types";
 
 export const MIN_RESOLUTION = 0;
 export const MAX_RESOLUTION = 15;
-
-/** H3 bboxes wider than this are split up: edges are read as the shorter way round the globe. */
-const MAX_POLYGON_WIDTH = 90;
 
 /** Each resolution is ~1.4 zooms apart (cells shrink by sqrt(7)); this keeps cells ~120px across. */
 export function resolutionForZoom(zoom: number): number {
@@ -15,21 +13,6 @@ export function resolutionForZoom(zoom: number): number {
     MIN_RESOLUTION,
     Math.min(MAX_RESOLUTION, Math.round(0.71 * zoom - 1.3)),
   );
-}
-
-/** Split a lng range into narrow slices, each wrapped into -180..180. */
-function lngSlices(west: number, east: number): [number, number][] {
-  const slices: [number, number][] = [];
-  for (let start = west; start < east;) {
-    const end = Math.min(
-      east,
-      (Math.floor(start / MAX_POLYGON_WIDTH) + 1) * MAX_POLYGON_WIDTH,
-    );
-    const offset = 360 * Math.floor((start + 180) / 360);
-    slices.push([start - offset, end - offset]);
-    start = end;
-  }
-  return slices;
 }
 
 /** H3's published average for the resolution, over all its cells. */
@@ -56,6 +39,10 @@ export function cellPolygon(cell: string): Polygon {
     type: "Polygon",
     coordinates: [unwrapRing(h3.cellToBoundary(cell, true))],
   };
+}
+
+export function cellLevel(cell: string): number {
+  return h3.getResolution(cell);
 }
 
 /** The same 64-bit index as a decimal integer, as databases often store it. */

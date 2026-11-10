@@ -66,6 +66,10 @@ export function cellPolygon(token: string): Polygon {
   };
 }
 
+export function cellLevel(token: string): number {
+  return s2.cellid.level(s2.cellid.fromToken(token));
+}
+
 /** The 64-bit cell ID the token abbreviates, as an unsigned integer. */
 export function cellInteger(token: string): bigint {
   return s2.cellid.fromToken(token);

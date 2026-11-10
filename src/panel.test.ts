@@ -50,6 +50,7 @@ describe("FeaturePanel", () => {
       h3: 5,
       quadkey: 8,
       s2: 9,
+      a5: 8,
     }));
   });
 
@@ -67,6 +68,7 @@ describe("FeaturePanel", () => {
       "H3 (res 5)",
       "Quadkey (zoom 8)",
       "S2 (level 9)",
+      "A5 (res 8)",
     ]);
   });
 
@@ -146,7 +148,7 @@ describe("FeaturePanel", () => {
       document.body.replaceChildren();
       panel = new FeaturePanel(
         document.body,
-        () => ({ h3: 5, quadkey: 8, s2: 9 }),
+        () => ({ h3: 5, quadkey: 8, s2: 9, a5: 8 }),
         () => units,
       );
       panel.show(polygon, { details });
@@ -177,7 +179,7 @@ describe("FeaturePanel", () => {
       onPreview = vi.fn();
       panel = new FeaturePanel(
         document.body,
-        () => ({ h3: 5, quadkey: 8, s2: 9 }),
+        () => ({ h3: 5, quadkey: 8, s2: 9, a5: 8 }),
         () => "metric",
         onPreview,
       );
@@ -185,7 +187,7 @@ describe("FeaturePanel", () => {
 
     it("offers one per covering, off to begin with, and none for formats", () => {
       panel.show(polygon);
-      expect(document.querySelectorAll(".preview-toggle")).toHaveLength(3);
+      expect(document.querySelectorAll(".preview-toggle")).toHaveLength(4);
       expect(toggle("H3").getAttribute("aria-pressed")).toBe("false");
       expect(
         button("GeoJSON").parentElement!.querySelector(".preview-toggle"),
@@ -239,11 +241,11 @@ describe("FeaturePanel", () => {
     });
 
     describe("as grid levels change", () => {
-      let resolutions: { h3: number; quadkey: number; s2: number };
+      let resolutions: { h3: number; quadkey: number; s2: number; a5: number };
 
       beforeEach(() => {
         document.body.replaceChildren();
-        resolutions = { h3: 5, quadkey: 8, s2: 9 };
+        resolutions = { h3: 5, quadkey: 8, s2: 9, a5: 8 };
         panel = new FeaturePanel(
           document.body,
           () => resolutions,
@@ -254,12 +256,13 @@ describe("FeaturePanel", () => {
 
       it("relabels the coverings", () => {
         panel.show(polygon, { key: "feature:a" });
-        resolutions = { h3: 6, quadkey: 9, s2: 10 };
+        resolutions = { h3: 6, quadkey: 9, s2: 10, a5: 9 };
         panel.refresh();
-        expect(labels().slice(-3)).toEqual([
+        expect(labels().slice(-4)).toEqual([
           "H3 (res 6)",
           "Quadkey (zoom 9)",
           "S2 (level 10)",
+          "A5 (res 9)",
         ]);
       });
 
@@ -320,7 +323,7 @@ describe("FeaturePanel", () => {
       };
       panel = new FeaturePanel(
         document.body,
-        () => ({ h3: 15, quadkey: 23, s2: 24 }),
+        () => ({ h3: 15, quadkey: 23, s2: 24, a5: 30 }),
         () => "metric",
         onPreview,
       );
@@ -375,6 +378,7 @@ describe("FeaturePanel", () => {
       h3: 15,
       quadkey: 23,
       s2: 24,
+      a5: 30,
     }));
     panel.show(huge);
 
@@ -467,6 +471,34 @@ describe("buildDetailsTable", () => {
     expect(children.className).toBe("truncate");
     expect((children as HTMLElement).title).toBe("a,b,c,d");
     expect(name.className).toBe("");
+  });
+
+  it("links web addresses, opening in a new tab, and nothing else", () => {
+    const table = buildDetailsTable([
+      { label: "osm_url", value: "https://www.openstreetmap.org/way/12" },
+      { label: "sneaky", value: "javascript:alert(1)" },
+    ])!;
+    const links = table.querySelectorAll("a");
+    expect(links).toHaveLength(1);
+    expect(links[0].href).toBe("https://www.openstreetmap.org/way/12");
+    expect(links[0].target).toBe("_blank");
+    expect(links[0].rel).toBe("noopener noreferrer");
+    expect(links[0].parentElement!.className).toBe("truncate");
+    expect(table.rows[1].cells[1].textContent).toBe("javascript:alert(1)");
+  });
+
+  it("links a value to where its row says, keeping the value as the text", () => {
+    const table = buildDetailsTable([
+      {
+        label: "osm",
+        value: "relation/5326784",
+        href: "https://www.openstreetmap.org/relation/5326784",
+      },
+    ])!;
+    const link = table.querySelector("a")!;
+    expect(link.textContent).toBe("relation/5326784");
+    expect(link.href).toBe("https://www.openstreetmap.org/relation/5326784");
+    expect(link.target).toBe("_blank");
   });
 
   it("adds a row's features with its + button, and shows it", () => {

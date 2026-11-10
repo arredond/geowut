@@ -6,7 +6,8 @@ function fakeLayer(id: string): GridLayer {
   const layer = {
     def: {
       id,
-      label: `${id} cells`,
+      label: id.toUpperCase(),
+      shape: `<polygon class="${id}-shape"/>`,
       color: "#000",
       minResolution: 0,
       maxResolution: 20,
@@ -31,8 +32,8 @@ describe("GridControl", () => {
   let layers: GridLayer[];
   let onInfo: ReturnType<typeof vi.fn<() => void>>;
   const rows = () => document.querySelector<HTMLElement>(".grid-rows")!;
-  const allGrids = () =>
-    document.querySelector<HTMLInputElement>(".grid-header input")!;
+  const chevron = () =>
+    document.querySelector<HTMLButtonElement>(".grid-collapse-button")!;
   const layerToggle = (i: number) =>
     document.querySelectorAll<HTMLInputElement>(".grid-row-label input")[i];
   const autoToggle = (i: number) =>
@@ -53,17 +54,17 @@ describe("GridControl", () => {
       .querySelector<HTMLButtonElement>('[title="Cell sizes per level"]')!
       .click();
     expect(onInfo).toHaveBeenCalledOnce();
-    expect(allGrids().checked).toBe(true);
+    expect(rows().hidden).toBe(false);
   });
 
-  it("toggles every grid from the title", () => {
+  it("folds the card from the title too", () => {
     document.querySelector<HTMLElement>(".grid-header-title")!.click();
-    expect(allGrids().checked).toBe(false);
+    expect(rows().hidden).toBe(true);
   });
 
   it("starts expanded, with no layers on and auto on", () => {
     expect(rows().hidden).toBe(false);
-    expect(allGrids().checked).toBe(true);
+    expect(chevron().getAttribute("aria-expanded")).toBe("true");
     expect(layerToggle(0).checked).toBe(false);
     expect(autoToggle(0).checked).toBe(true);
     expect(resolution(0).disabled).toBe(true);
@@ -75,21 +76,24 @@ describe("GridControl", () => {
     expect(layers[1].setVisible).not.toHaveBeenCalled();
   });
 
-  describe("top-level toggle", () => {
-    it("collapses the card and hides every layer", () => {
-      toggle(layerToggle(0));
-      toggle(allGrids());
+  describe("chevron", () => {
+    it("folds the card away and back, saying which it'll do", () => {
+      chevron().click();
       expect(rows().hidden).toBe(true);
-      expect(layers[0].visible).toBe(false);
+      expect(chevron().getAttribute("aria-expanded")).toBe("false");
+      expect(chevron().title).toBe("Expand grid layers");
+
+      chevron().click();
+      expect(rows().hidden).toBe(false);
+      expect(chevron().title).toBe("Collapse grid layers");
     });
 
-    it("brings back only the layers that were on", () => {
+    it("leaves the grids on the map as they were", () => {
       toggle(layerToggle(0));
-      toggle(allGrids());
-      toggle(allGrids());
-      expect(rows().hidden).toBe(false);
+      chevron().click();
       expect(layers[0].visible).toBe(true);
       expect(layers[1].visible).toBe(false);
+      chevron().click();
       expect(layerToggle(0).checked).toBe(true);
     });
   });
@@ -122,6 +126,41 @@ describe("GridControl", () => {
     expect(resolution(0).value).toBe("20");
   });
 
+  describe("stepper", () => {
+    const step = (i: number, label: "Coarser" | "Finer") =>
+      document.querySelectorAll<HTMLButtonElement>(`[title="${label}"]`)[i];
+
+    it("steps from the level shown, leaving auto", () => {
+      step(0, "Finer").click();
+      expect(layers[0].setAuto).toHaveBeenLastCalledWith(false);
+      expect(autoToggle(0).checked).toBe(false);
+      expect(resolution(0).disabled).toBe(false);
+      expect(layers[0].setResolution).toHaveBeenLastCalledWith(6);
+      expect(resolution(0).value).toBe("6");
+
+      step(0, "Coarser").click();
+      step(0, "Coarser").click();
+      expect(resolution(0).value).toBe("4");
+      expect(layers[1].setResolution).not.toHaveBeenCalled();
+    });
+  });
+
+  it("names each grid plainly, beside its cell shape", () => {
+    const labels = [
+      ...document.querySelectorAll<HTMLElement>(".grid-row-label"),
+    ];
+    expect(labels.map((label) => label.textContent)).toEqual(["H3", "S2"]);
+    expect(labels[0].querySelector(".grid-icon .h3-shape")).not.toBeNull();
+    expect(labels[1].querySelector(".grid-icon .s2-shape")).not.toBeNull();
+  });
+
+  it("draws its checkboxes as switches, and says so", () => {
+    for (const input of [layerToggle(0), layerToggle(1)]) {
+      expect(input.getAttribute("role")).toBe("switch");
+      expect(input.getAttribute("aria-label")).toBeTruthy();
+    }
+  });
+
   it("follows resolution changes from zooming", () => {
     layers[0].onResolutionChange!(11);
     expect(resolution(0).value).toBe("11");
@@ -130,6 +169,11 @@ describe("GridControl", () => {
   it("flags resolutions with too many cells to draw", () => {
     layers[0].onTooManyCellsChange!(true);
     expect(resolution(0).classList.contains("too-many-cells")).toBe(true);
+    expect(
+      resolution(0)
+        .closest(".grid-stepper")!
+        .classList.contains("too-many-cells"),
+    ).toBe(true);
     expect(resolution(0).title).not.toBe("");
 
     layers[0].onTooManyCellsChange!(false);

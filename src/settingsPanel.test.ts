@@ -108,6 +108,16 @@ describe("SettingsPanel", () => {
     expect(popover().hidden).toBe(false);
   });
 
+  it("links to GeoWut's license and the third-party ones", () => {
+    const links = [
+      ...document.querySelectorAll<HTMLAnchorElement>(".settings-footer a"),
+    ].map((a) => [a.textContent, a.getAttribute("href")]);
+    expect(links).toEqual([
+      ["MIT licensed", "https://github.com/arredond/geowut/blob/main/LICENSE"],
+      ["Third-party licenses", "third-party-licenses.txt"],
+    ]);
+  });
+
   it("follows changes made elsewhere", () => {
     store.set({ theme: "dark" });
     expect(radio("theme", "dark").checked).toBe(true);

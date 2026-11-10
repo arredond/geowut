@@ -2,6 +2,7 @@ import { geojsonToWKT } from "@terraformer/wkt";
 import type { Feature, Geometry } from "geojson";
 import { geometryBbox, geometryCenter, bboxToString } from "./geometry";
 import {
+  a5Coverage,
   h3Coverage,
   quadkeyCoverage,
   s2Coverage,
@@ -15,6 +16,7 @@ export interface Resolutions {
   h3: number;
   quadkey: number;
   s2: number;
+  a5: number;
 }
 
 export interface DetailRow {
@@ -22,6 +24,8 @@ export interface DetailRow {
   value: string;
   /** Cut to one line with an ellipsis (the full value in a tooltip), as for long cell IDs. */
   truncate?: boolean;
+  /** Where the value links to, as for an OSM reference; web addresses link to themselves anyway. */
+  href?: string;
   /** Features this row stands for, which a + button adds to the map, as for a cell's parent. */
   features?: () => Feature[];
 }
@@ -139,14 +143,26 @@ export function buildDetailsTable(
   if (rows.length === 0) return null;
   const table = document.createElement("table");
   table.className = "details-table";
-  for (const { label, value, truncate, features } of rows) {
+  for (const { label, value, truncate, features, href } of rows) {
     const row = table.insertRow();
     const name = document.createElement("th");
     name.textContent = label;
     row.append(name);
     const cell = row.insertCell();
-    cell.textContent = value;
-    if (truncate) {
+    // Web links open, in a new tab; anything else (javascript:, say) stays text.
+    const target = href ?? value;
+    const isLink = /^https?:\/\/\S+$/i.test(target);
+    if (isLink) {
+      const link = document.createElement("a");
+      link.href = target;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = value;
+      cell.appendChild(link);
+    } else {
+      cell.textContent = value;
+    }
+    if (truncate || (isLink && !href)) {
       cell.className = "truncate";
       cell.title = value;
     }
@@ -352,6 +368,7 @@ export class FeaturePanel {
         quadkeyCoverage,
       ),
       covering("s2", `S2 (level ${resolutions.s2})`, s2Coverage),
+      covering("a5", `A5 (res ${resolutions.a5})`, a5Coverage),
     ];
     return coverings.filter(
       ({ grid }) => !(cell?.grid === grid && cell.level === resolutions[grid]),

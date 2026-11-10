@@ -681,6 +681,26 @@ describe("featureMeasurements", () => {
   });
 });
 
+describe("featureDetails links", () => {
+  it("links OSM references, and only those, to openstreetmap.org", () => {
+    const [added] = controller.addFeatures([
+      feature(
+        { type: "Point", coordinates: [1, 2] },
+        { osm: "relation/5326784", other: "relation/1", note: "way/x" },
+      ),
+    ]).added;
+    const rows = Object.fromEntries(
+      featureDetails(added, "metric").map((row) => [row.label, row]),
+    );
+    expect(rows.osm).toMatchObject({
+      value: "relation/5326784",
+      href: "https://www.openstreetmap.org/relation/5326784",
+    });
+    expect(rows.other).not.toHaveProperty("href");
+    expect(rows.note).not.toHaveProperty("href");
+  });
+});
+
 describe("featureDetails", () => {
   const part = (geometry: Geometry, properties = {}) =>
     ({
