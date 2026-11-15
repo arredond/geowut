@@ -1,11 +1,10 @@
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { GeoJSONStoreFeatures } from "terra-draw";
+import { DEFAULT_COLOR, featureStyle } from "./featureStyle";
 
 const SOURCE_ID = "z-extrusion";
 const LAYER_ID = "z-extrusion";
-/** Terra Draw's own polygon fill, so prisms read as the polygons they stand on. */
-const COLOR = "#3f97e0";
 
 /**
  * Polygons with Z, as prisms rising from the ground to their highest Z, taken for metres above
@@ -18,11 +17,13 @@ export function extrusionFeatures(shapes: GeoJSONStoreFeatures[]): Feature[] {
     const z = shape.properties.zRange as [number, number] | undefined;
     // Below the ground there's nothing to raise.
     if (shape.geometry.type !== "Polygon" || !z || z[1] <= 0) return [];
+    const { color } = featureStyle(shape);
     return [
       {
         type: "Feature",
         geometry: shape.geometry as Polygon,
-        properties: { height: z[1] },
+        // The polygon's own color, so prisms read as the polygons they stand on.
+        properties: { height: z[1], ...(color && { color }) },
       },
     ];
   });
@@ -49,7 +50,7 @@ export class Extrusion {
         source: SOURCE_ID,
         layout: { visibility: "none" },
         paint: {
-          "fill-extrusion-color": COLOR,
+          "fill-extrusion-color": ["coalesce", ["get", "color"], DEFAULT_COLOR],
           "fill-extrusion-height": ["get", "height"],
           "fill-extrusion-base": 0,
           "fill-extrusion-opacity": 0.6,

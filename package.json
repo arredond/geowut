@@ -33,6 +33,8 @@
     "@tmcw/togeojson": "^7.1.3",
     "a5-js": "^1.0.0",
     "betterknown": "^1.2.0",
+    "emoji-picker-element": "^1.29.1",
+    "emoji-picker-element-data": "^1.8.0",
     "epsg-index": "^2.0.0",
     "fflate": "^0.8.3",
     "flatgeobuf": "^4.6.1",

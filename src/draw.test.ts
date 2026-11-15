@@ -15,6 +15,8 @@ import type { DrawCallbacks } from "./draw";
 import { extrusionFeatures } from "./extrusion";
 
 const terraDrawInstance = vi.hoisted(() => ({ current: null as unknown }));
+/** Terra Draw's session stack sizes, as the fake below moves them. */
+const history = vi.hoisted(() => ({ undo: 0, redo: 0 }));
 const selectModeOptions = vi.hoisted(() => ({ current: null as any }));
 const measurer = vi.hoisted(() => ({ start: null as any, stop: null as any }));
 
@@ -47,7 +49,10 @@ vi.mock("terra-draw", () => ({
       selectModeOptions.current = options;
     }
   },
-  TerraDrawSessionUndoRedo: class {},
+  TerraDrawSessionUndoRedo: class {
+    undoSize = () => history.undo;
+    redoSize = () => history.redo;
+  },
 }));
 
 /** Mimics the Terra Draw validation that matters to pasted data. */
@@ -73,14 +78,24 @@ function fakeTerraDraw() {
     },
     setMode: vi.fn(),
     selectFeature: vi.fn(),
-    undo: vi.fn(),
-    redo: vi.fn(),
+    undo: vi.fn(() => {
+      history.undo--;
+      history.redo++;
+    }),
+    redo: vi.fn(() => {
+      history.redo--;
+      history.undo++;
+    }),
     canUndo: vi.fn(() => true),
     canRedo: vi.fn(() => false),
     getSnapshot: () => [...store.values()],
     getSnapshotFeature: (id: unknown) => store.get(id),
     getFeaturesAtLngLat: vi.fn((): GeoJSONStoreFeatures[] => []),
-    updateFeatureProperties: vi.fn(),
+    // One step for each feature, as Terra Draw's session history records them.
+    updateFeatureProperties: vi.fn((_id: unknown, _properties: unknown) => {
+      history.undo++;
+      history.redo = 0;
+    }),
     removeFeatures: vi.fn((ids: unknown[]) =>
       ids.forEach((id) => store.delete(id)),
     ),
@@ -125,6 +140,7 @@ let callbacks: { [K in keyof DrawCallbacks]: ReturnType<typeof vi.fn> };
 const nextTick = () => new Promise((resolve) => setTimeout(resolve));
 
 beforeEach(() => {
+  history.undo = history.redo = 0;
   terraDraw = fakeTerraDraw();
   terraDrawInstance.current = terraDraw;
   callbacks = {
@@ -132,6 +148,7 @@ beforeEach(() => {
     onHistoryChange: vi.fn(),
     onFeatureChanged: vi.fn(),
     onFeaturesRemoved: vi.fn(),
+    onHistoryReplayed: vi.fn(),
     onShapesChange: vi.fn(),
     onMapClicked: vi.fn(),
     onMeasurementChange: vi.fn(),
@@ -380,6 +397,56 @@ describe("deleting", () => {
   });
 });
 
+describe("style", () => {
+  it("restyles every part of a pasted feature", () => {
+    terraDraw.store.set("c", stored("c", { sourceId: "x" }));
+    terraDraw.store.set("d", stored("d", { sourceId: "x" }));
+    terraDraw.store.set("e", stored("e"));
+    controller.setStyle("c", { color: "#abc" });
+    expect(
+      terraDraw.updateFeatureProperties.mock.calls.map(([id]) => id),
+    ).toEqual(["c", "d"]);
+    expect(terraDraw.updateFeatureProperties).toHaveBeenCalledWith("c", {
+      color: "#abc",
+    });
+  });
+
+  it("undoes and redoes a change to every part as one step", () => {
+    terraDraw.store.set("c", stored("c", { sourceId: "x" }));
+    terraDraw.store.set("d", stored("d", { sourceId: "x" }));
+    terraDraw.store.set("e", stored("e"));
+    terraDraw.canRedo.mockReturnValue(true);
+    controller.setStyle("e", { color: "#abc" });
+    controller.setStyle("c", { color: "#def" });
+    controller.undo();
+    expect(terraDraw.undo).toHaveBeenCalledTimes(2);
+    controller.redo();
+    expect(terraDraw.redo).toHaveBeenCalledTimes(2);
+    controller.undo();
+    controller.undo();
+    // The single-part change, below the group, is one step.
+    expect(terraDraw.undo).toHaveBeenCalledTimes(5);
+  });
+
+  it("replaces properties, none as no properties at all", () => {
+    terraDraw.store.set("c", stored("c", { sourceProperties: { a: 1 } }));
+    controller.setProperties("c", { b: 2 });
+    expect(terraDraw.updateFeatureProperties).toHaveBeenLastCalledWith("c", {
+      sourceProperties: { b: 2 },
+    });
+    controller.setProperties("c", {});
+    expect(terraDraw.updateFeatureProperties).toHaveBeenLastCalledWith("c", {
+      sourceProperties: undefined,
+    });
+  });
+
+  it("reads a feature's style back", () => {
+    terraDraw.store.set("c", stored("c", { color: "#abc", emoji: "⭐" }));
+    expect(controller.getStyle("c")).toEqual({ color: "#abc", emoji: "⭐" });
+    expect(controller.getStyle("missing")).toEqual({});
+  });
+});
+
 describe("history", () => {
   it.each(["undo", "redo"] as const)(
     "does nothing on %s with nothing to replay, like a disabled button",
@@ -472,14 +539,14 @@ describe("history", () => {
   });
 
   it.each(["undo", "redo"] as const)(
-    "leaves any tool and closes what is open on %s",
+    "leaves any tool and says what may have changed on %s",
     (action) => {
       terraDraw.canRedo.mockReturnValue(true);
       controller.setState("delete");
       controller[action]();
       expect(controller.state).toBe("select");
       expect(terraDraw[action]).toHaveBeenCalled();
-      expect(callbacks.onFeaturesRemoved).toHaveBeenCalled();
+      expect(callbacks.onHistoryReplayed).toHaveBeenCalled();
     },
   );
 });
@@ -592,6 +659,25 @@ describe("addFeatures", () => {
     for (const part of add(feature(geometry, { name: "Centro" })).added) {
       expect(featureProperties(part)).toEqual({ name: "Centro" });
     }
+  });
+
+  it("styles features from their gw: properties, which it keeps apart", () => {
+    const [added] = add(
+      feature(
+        { type: "Point", coordinates: [1, 2] },
+        { name: "Café", "gw:color": "#e5484d", "gw:emoji": "☕" },
+      ),
+    ).added;
+    expect(added.properties.color).toBe("#e5484d");
+    expect(added.properties.emoji).toBe("☕");
+    expect(featureProperties(added)).toEqual({ name: "Café" });
+  });
+
+  it("treats properties that are only style as none", () => {
+    const [added] = add(
+      feature({ type: "Point", coordinates: [1, 2] }, { "gw:color": "#abc" }),
+    ).added;
+    expect(featureProperties(added)).toBeNull();
   });
 
   it("treats empty properties as none", () => {
@@ -794,9 +880,9 @@ describe("featureDetails", () => {
     );
     expect(featureDetails(line, "metric")).toEqual([
       { label: "Length (km)", value: "111.319" },
-      { label: "name", value: "Centro" },
-      { label: "tags", value: '{"a":1}' },
-      { label: "none", value: "null" },
+      { label: "name", value: "Centro", property: "name" },
+      { label: "tags", value: '{"a":1}', property: "tags" },
+      { label: "none", value: "null", property: "none" },
     ]);
   });
 
@@ -897,6 +983,41 @@ describe("exportCollection", () => {
     expect(features.map((f) => f.geometry.type)).toEqual([
       "Polygon",
       "Polygon",
+    ]);
+  });
+
+  it("writes the style back as gw: properties", () => {
+    const [point] = add(
+      feature(
+        { type: "Point", coordinates: [1, 2] },
+        { name: "Café", "gw:emoji": "☕" },
+      ),
+    );
+    expect(exportCollection([point]).features[0].properties).toEqual({
+      name: "Café",
+      "gw:emoji": "☕",
+    });
+  });
+
+  it("keeps the style of any part of a whole pasted feature", () => {
+    const collection: Geometry = {
+      type: "GeometryCollection",
+      geometries: [
+        { type: "Polygon", coordinates: [ring] },
+        { type: "Point", coordinates: [1, 2] },
+      ],
+    };
+    const [polygon, point] = add(feature(collection));
+    const styled = {
+      ...point,
+      properties: { ...point.properties, emoji: "⭐" },
+    };
+    expect(exportCollection([polygon, styled]).features).toEqual([
+      {
+        type: "Feature",
+        geometry: collection,
+        properties: { "gw:emoji": "⭐" },
+      },
     ]);
   });
 

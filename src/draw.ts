@@ -26,6 +26,17 @@ import { Measurer, MEASURE_TOOLS } from "./measure";
 import type { Measurement, MeasureTool } from "./measure";
 import type { DetailRow } from "./panel";
 import type { Units } from "./units";
+import {
+  featureStyle,
+  LINE_STYLES,
+  pointStyles,
+  POLYGON_STYLES,
+  readyEmojiImage,
+  readStyle,
+  styleProperties,
+} from "./featureStyle";
+import type { FeatureStyle } from "./featureStyle";
+import { valueText } from "./propertyEditor";
 
 type JSONObject = NonNullable<GeoJSONStoreFeatures["properties"][string]>;
 type FeatureId = GeoJSONStoreFeatures["id"] & {};
@@ -52,6 +63,8 @@ export interface DrawCallbacks {
   /** A feature was just drawn or edited. */
   onFeatureChanged: (feature: GeoJSONStoreFeatures) => void;
   onFeaturesRemoved: () => void;
+  /** An undo or redo: any feature may have changed, or be gone. */
+  onHistoryReplayed: () => void;
   /**
    * Features were added or removed, or ones with Z moved or lost it: what counts, or depends on
    * their Z (the export button, polygon extrusion), may have changed. Once a frame at most.
@@ -101,21 +114,38 @@ export class DrawController {
   private callbacks: DrawCallbacks;
   private editedId?: FeatureId;
   private finishingClick = false;
+  private session = new TerraDrawSessionUndoRedo();
+  /**
+   * Terra Draw records a change to a feature's properties as one step for each of its parts.
+   * Changes that took more than one are undone and redone whole: each group is where its
+   * stack stood after it, and how many steps it took.
+   */
+  private undoGroups: { at: number; steps: number }[] = [];
+  private redoGroups: { at: number; steps: number }[] = [];
 
   constructor(map: MapLibreMap, callbacks: DrawCallbacks) {
     this.callbacks = callbacks;
     this.terraDraw = new TerraDraw({
       adapter: new TerraDrawMapLibreGLAdapter({ map }),
-      undoRedo: { sessionLevel: new TerraDrawSessionUndoRedo() },
+      undoRedo: { sessionLevel: this.session },
       modes: [
         new TerraDrawRenderMode({ modeName: IDLE_MODE, styles: {} }),
-        new TerraDrawPointMode(),
-        new TerraDrawLineStringMode(),
-        new TerraDrawPolygonMode(),
-        new TerraDrawRectangleMode(),
+        // Each mode styles the features it drew, in their own color if they have one.
+        new TerraDrawPointMode({
+          styles: pointStyles((emoji) => readyEmojiImage(map, emoji)),
+        }),
+        new TerraDrawLineStringMode({ styles: LINE_STYLES }),
+        new TerraDrawPolygonMode({ styles: POLYGON_STYLES }),
+        new TerraDrawRectangleMode({ styles: POLYGON_STYLES }),
         // Globe: a true circle on the ground, which only looks like one on a Web Mercator map near the equator.
-        new TerraDrawCircleMode({ projection: "globe" }),
-        new TerraDrawFreehandMode({ drawInteraction: "click-move-or-drag" }),
+        new TerraDrawCircleMode({
+          projection: "globe",
+          styles: POLYGON_STYLES,
+        }),
+        new TerraDrawFreehandMode({
+          drawInteraction: "click-move-or-drag",
+          styles: POLYGON_STYLES,
+        }),
         // Leaving an edit is ours to decide, so Terra Draw doesn't deselect on its own.
         new TerraDrawSelectMode({
           flags: EDIT_FLAGS,
@@ -183,17 +213,68 @@ export class DrawController {
     this.terraDraw.selectFeature(id);
   }
 
-  /** Remove a feature, along with the rest of the pasted feature it may be a part of. */
-  delete(id: FeatureId): void {
+  /** A feature's id, with those of the rest of the pasted feature it may be a part of. */
+  private partIds(id: FeatureId): FeatureId[] {
     const { sourceId } =
       this.terraDraw.getSnapshotFeature(id)?.properties ?? {};
-    const parts = sourceId
-      ? this.terraDraw
-          .getSnapshot()
-          .filter((f) => f.properties.sourceId === sourceId)
-      : [];
-    this.terraDraw.removeFeatures(sourceId ? parts.map((f) => f.id!) : [id]);
+    if (!sourceId) return [id];
+    return this.terraDraw
+      .getSnapshot()
+      .filter((f) => f.properties.sourceId === sourceId)
+      .map((f) => f.id!);
+  }
+
+  /** Remove a feature, along with the rest of the pasted feature it may be a part of. */
+  delete(id: FeatureId): void {
+    this.terraDraw.removeFeatures(this.partIds(id));
     this.callbacks.onFeaturesRemoved();
+  }
+
+  /** The feature's style, as it stands. */
+  getStyle(id: FeatureId): FeatureStyle {
+    const feature = this.terraDraw.getSnapshotFeature(id);
+    return feature ? featureStyle(feature) : {};
+  }
+
+  /** Restyles a feature, and every other part of it: undefined takes that part of the style away. */
+  setStyle(id: FeatureId, change: Partial<FeatureStyle>): void {
+    this.updateParts(id, change);
+    // Prisms are drawn in their polygon's color.
+    if ("color" in change) this.scheduleShapesChange();
+  }
+
+  /** The feature as it stands now, if it's still there. */
+  getFeature(id: FeatureId): GeoJSONStoreFeatures | undefined {
+    return this.terraDraw.getSnapshotFeature(id);
+  }
+
+  /** Replaces a feature's own properties (style aside), on every part of it, as one undo step. */
+  setProperties(id: FeatureId, properties: Record<string, unknown>): void {
+    const empty = Object.keys(properties).length === 0;
+    this.updateParts(id, {
+      sourceProperties: empty ? undefined : (properties as JSONObject),
+    });
+  }
+
+  private updateParts(
+    id: FeatureId,
+    change: Parameters<TerraDraw["updateFeatureProperties"]>[1],
+  ): void {
+    const before = this.undoSize();
+    for (const partId of this.partIds(id))
+      this.terraDraw.updateFeatureProperties(partId, change);
+    const steps = this.undoSize() - before;
+    if (steps > 1) this.undoGroups.push({ at: this.undoSize(), steps });
+    // A new step clears the redo stack, and any groups in it.
+    if (steps > 0) this.redoGroups = [];
+  }
+
+  private undoSize(): number {
+    return this.session.undoSize?.() ?? 0;
+  }
+
+  private redoSize(): number {
+    return this.session.redoSize?.() ?? 0;
   }
 
   deleteAll(): void {
@@ -204,19 +285,38 @@ export class DrawController {
   }
 
   undo(): void {
-    if (this.terraDraw.canUndo())
-      this.replayHistory(() => this.terraDraw.undo());
+    if (!this.terraDraw.canUndo()) return;
+    const steps = this.groupSteps(this.undoGroups, this.undoSize());
+    this.replayHistory(() => {
+      for (let i = 0; i < steps; i++) this.terraDraw.undo();
+    });
+    if (steps > 1) this.redoGroups.push({ at: this.redoSize(), steps });
   }
 
   redo(): void {
-    if (this.terraDraw.canRedo())
-      this.replayHistory(() => this.terraDraw.redo());
+    if (!this.terraDraw.canRedo()) return;
+    const steps = this.groupSteps(this.redoGroups, this.redoSize());
+    this.replayHistory(() => {
+      for (let i = 0; i < steps; i++) this.terraDraw.redo();
+    });
+    if (steps > 1) this.undoGroups.push({ at: this.undoSize(), steps });
+  }
+
+  /** How many steps the next undo or redo takes: a whole group, if one ends at the top of the stack. */
+  private groupSteps(
+    groups: { at: number; steps: number }[],
+    size: number,
+  ): number {
+    // Groups left above the stack are from steps since undone and dropped.
+    while (groups.length > 0 && groups.at(-1)!.at > size) groups.pop();
+    if (groups.at(-1)?.at !== size) return 1;
+    return groups.pop()!.steps;
   }
 
   private replayHistory(replay: () => void): void {
     this.setState("select");
     replay();
-    this.callbacks.onFeaturesRemoved(); // Whatever was open may be gone or out of date.
+    this.callbacks.onHistoryReplayed();
   }
 
   /**
@@ -416,7 +516,9 @@ function toStoreFeatures({
     drawable.length > 1 ||
     (geometry.type === "Polygon" && geometry.coordinates.length > 1) ||
     zRange(geometry) !== null;
-  const hasProperties = properties && Object.keys(properties).length > 0;
+  // Style is the map's to show, not a property to list.
+  const { style, rest } = readStyle(properties);
+  const hasProperties = rest && Object.keys(rest).length > 0;
   const now = Date.now();
   const sourceId = crypto.randomUUID();
 
@@ -428,7 +530,8 @@ function toStoreFeatures({
       mode,
       createdAt: now,
       updatedAt: now,
-      ...(hasProperties && { sourceProperties: properties as JSONObject }),
+      ...(hasProperties && { sourceProperties: rest as JSONObject }),
+      ...style,
       ...(isSimplified && {
         sourceGeometry: geometry as unknown as JSONObject,
       }),
@@ -466,10 +569,16 @@ export function exportCollection(
       if (done.has(sourceId)) continue;
       done.add(sourceId);
     }
+    // A part with an emoji may come after one with none: a collection's point after its polygon.
+    const styled = whole ? parts : [feature];
+    const style = Object.assign(
+      {},
+      ...styled.map(featureStyle).reverse(),
+    ) as FeatureStyle;
     features.push({
       type: "Feature",
       geometry: whole ? featureGeometry(feature) : feature.geometry,
-      properties: featureProperties(feature) ?? {},
+      properties: { ...featureProperties(feature), ...styleProperties(style) },
     });
   }
   return { type: "FeatureCollection", features };
@@ -519,16 +628,18 @@ export function featureDetails(
   units: Units,
 ): DetailRow[] {
   const z = zRange(featureGeometry(feature));
-  const entries = Object.entries({
+  // Worked out from the geometry, so not to be edited: only the properties are.
+  const computed = Object.entries({
     ...featureMeasurements(feature, units),
     ...(z && { Z: formatZRange(z) }),
-    ...featureProperties(feature),
-  });
-  return entries.map(([label, value]) => {
-    const text =
-      typeof value === "object" ? JSON.stringify(value) : String(value);
-    return { label, value: text, ...osmLink(label, text) };
-  });
+  }).map(([label, value]) => ({ label, value: String(value) }));
+  const properties = Object.entries(featureProperties(feature) ?? {}).map(
+    ([label, value]) => {
+      const text = valueText(value);
+      return { label, value: text, property: label, ...osmLink(label, text) };
+    },
+  );
+  return [...computed, ...properties];
 }
 
 /** An `osm` reference such as relation/5326784, as search results carry, links to that object on OpenStreetMap. */

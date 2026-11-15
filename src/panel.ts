@@ -11,6 +11,8 @@ import {
 import { copyText } from "./clipboard";
 import { ICONS } from "./icons";
 import type { Units } from "./units";
+import { PropertyEditor } from "./propertyEditor";
+import type { PropertyEditing } from "./propertyEditor";
 
 export interface Resolutions {
   h3: number;
@@ -28,6 +30,8 @@ export interface DetailRow {
   href?: string;
   /** Features this row stands for, which a + button adds to the map, as for a cell's parent. */
   features?: () => Feature[];
+  /** The property this row shows, for rows that can be edited: what's measured can't be. */
+  property?: string;
 }
 
 /** Adds features to the map, saying how many made it. */
@@ -45,6 +49,8 @@ export interface PanelContent {
   details?: (units: Units) => DetailRow[];
   /** A grid cell: its covering in its own grid, at its own level, would just be itself. */
   cell?: { grid: Grid; level: number };
+  /** A feature's own properties, edited in place in the rows that show them. */
+  properties?: PropertyEditing;
 }
 
 interface CopyItem {
@@ -143,8 +149,9 @@ export function buildDetailsTable(
   if (rows.length === 0) return null;
   const table = document.createElement("table");
   table.className = "details-table";
-  for (const { label, value, truncate, features, href } of rows) {
+  for (const { label, value, truncate, features, href, property } of rows) {
     const row = table.insertRow();
+    if (property !== undefined) row.dataset.property = property;
     const name = document.createElement("th");
     name.textContent = label;
     row.append(name);
@@ -273,6 +280,7 @@ export class FeaturePanel {
   private addToMap?: AddToMap;
   /** When each row's features were last added, by button title, to keep showing it through redraws. */
   private recentlyAdded = new Map<string, number>();
+  private propertyEditor = new PropertyEditor();
   /** Coverings toggled on, which stay on as the levels change... */
   private wanted = new Set<Grid>();
   /** ...those of them drawn on the map, with their cells... */
@@ -332,8 +340,18 @@ export class FeaturePanel {
     }
     const coverings = this.coverings(geometry, content.cell);
     this.updatePreviews(coverings.filter((c) => this.wanted.has(c.grid)));
-    this.render(content.details?.(this.getUnits()) ?? [], formats, coverings);
+    this.render(
+      content.details?.(this.getUnits()) ?? [],
+      formats,
+      coverings,
+      content.properties,
+    );
     this.root.hidden = false;
+  }
+
+  /** The key of what's shown, if the panel is open. */
+  get shownKey(): string | undefined {
+    return this.root.hidden ? undefined : this.shown?.[1].key;
   }
 
   /** Show the same again, as after a change of units or grid levels: previews on stay on, at the new levels. */
@@ -428,6 +446,7 @@ export class FeaturePanel {
     details: DetailRow[],
     formats: CopyItem[],
     coverings: Covering[],
+    properties?: PropertyEditing,
   ): void {
     this.root.replaceChildren();
 
@@ -441,7 +460,12 @@ export class FeaturePanel {
     this.root.appendChild(closeButton);
 
     const table = buildDetailsTable(details, this.addToMap, this.recentlyAdded);
-    if (table) this.root.appendChild(section("Properties", table));
+    if (table) {
+      const add = properties && this.propertyEditor.attach(table, properties);
+      this.root.appendChild(
+        section("Properties", table, ...(add ? [add] : [])),
+      );
+    }
     this.root.appendChild(section("Copy as", buildCopyList(formats)));
     if (coverings.length > 0) {
       this.root.appendChild(

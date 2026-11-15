@@ -8,7 +8,12 @@ import {
   cellDetails,
 } from "./grids";
 import { GridControl } from "./gridControl";
-import { DrawController, featureDetails, featureGeometry } from "./draw";
+import {
+  DrawController,
+  featureDetails,
+  featureGeometry,
+  featureProperties,
+} from "./draw";
 import { FeaturePanel } from "./panel";
 import { FeaturePopup } from "./popup";
 import { Toolbar, historyShortcut, isTyping } from "./toolbar";
@@ -33,6 +38,7 @@ import { ICONS } from "./icons";
 import { SettingsPanel } from "./settingsPanel";
 import { GridInfoModal } from "./gridInfo";
 import { CoveragePreview } from "./grids/preview";
+import { addEmojiLayer, COLOR_PROPERTY, EMOJI_PROPERTY } from "./featureStyle";
 
 const REPO_URL = "https://github.com/arredond/geowut";
 
@@ -159,9 +165,19 @@ function popupAnchor(
 const gridInfo = new GridInfoModal(app, gridLayers, units);
 
 function showFeature(feature: GeoJSONStoreFeatures): void {
+  const id = feature.id!;
   featurePanel.show(featureGeometry(feature), {
-    key: `feature:${feature.id}`,
+    key: `feature:${id}`,
     details: (units) => featureDetails(feature, units),
+    properties: {
+      values: featureProperties(feature) ?? {},
+      reserved: [COLOR_PROPERTY, EMOJI_PROPERTY],
+      onChange: (values) => {
+        draw.setProperties(id, values);
+        const changed = draw.getFeature(id);
+        if (changed) showFeature(changed);
+      },
+    },
   });
 }
 
@@ -183,6 +199,15 @@ const draw = new DrawController(map, {
     featurePanel.hide();
     featurePopup.hide();
   },
+  // A feature shown stays shown, as it now is, so an undone edit can be seen undone.
+  onHistoryReplayed: () => {
+    featurePopup.hide();
+    const key = featurePanel.shownKey;
+    if (!key?.startsWith("feature:")) return;
+    const feature = draw.getFeature(key.slice("feature:".length));
+    if (feature) showFeature(feature);
+    else featurePanel.hide();
+  },
   onMapClicked: (feature, event) => {
     const hit = gridCellAtPoint(map, gridLayers, event.point);
     if (hit) {
@@ -194,10 +219,25 @@ const draw = new DrawController(map, {
     } else if (feature) {
       const id = feature.id!;
       showFeature(feature);
-      featurePopup.show(popupAnchor(feature, event), {
-        onEdit: () => draw.edit(id),
-        onDelete: () => draw.delete(id),
-      });
+      const style = draw.getStyle(id);
+      featurePopup.show(
+        popupAnchor(feature, event),
+        {
+          onEdit: () => draw.edit(id),
+          onDelete: () => draw.delete(id),
+          style: {
+            current: style,
+            isPoint: feature.geometry.type === "Point",
+            onChange: (change) => {
+              draw.setStyle(id, change);
+              if ("emoji" in change)
+                featurePopup.setOffset(change.emoji ? 16 : 10);
+            },
+          },
+        },
+        // Clear of the point's dot or emoji, when it points at one.
+        style.emoji ? 16 : 10,
+      );
     } else {
       featurePanel.hide();
     }
@@ -305,6 +345,8 @@ map.on("load", () => {
   for (const layer of gridLayers) layer.addToMap();
   coveragePreview.addToMap();
   extrusion.addToMap();
+  // Over Terra Draw's points, which it has added on this same load.
+  addEmojiLayer(map);
 
   const gridControl = new GridControl(app, gridLayers, () => gridInfo.show());
   gridControl.setZoom(map.getZoom());

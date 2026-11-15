@@ -22,8 +22,8 @@ setWorkerUrl(maplibreWorkerUrl);
 
 const MAX_MERCATOR_LAT = 85.05;
 
-/** Sources and layers of our own (grids, Terra Draw's 'td' and 'td-measure', polygon extrusion), as opposed to the basemap's. */
-const OVERLAY_PREFIXES = ["grid-", "td-", "z-"];
+/** Sources and layers of our own (grids, Terra Draw's 'td' and 'td-measure', point emoji, polygon extrusion), as opposed to the basemap's. */
+const OVERLAY_PREFIXES = ["grid-", "td-", "gw-", "z-"];
 const isOverlay = (id: string) =>
   OVERLAY_PREFIXES.some((prefix) => id.startsWith(prefix));
 
