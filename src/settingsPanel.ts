@@ -4,7 +4,7 @@ import { BASEMAPS } from "./settings";
 import type { Settings, SettingsStore } from "./settings";
 
 /** Settings picked from a list of options, as opposed to the custom basemap's details. */
-type ChoiceKey = "units" | "theme" | "basemap";
+type ChoiceKey = "units" | "theme" | "basemap" | "projection";
 
 interface Choice<K extends ChoiceKey> {
   key: K;
@@ -30,6 +30,15 @@ const THEME_CHOICE: Choice<"theme"> = {
     { id: "light", label: "Light" },
     { id: "dark", label: "Dark" },
     { id: "auto", label: "Auto" },
+  ],
+};
+
+const PROJECTION_CHOICE: Choice<"projection"> = {
+  key: "projection",
+  title: "Projection",
+  options: [
+    { id: "globe", label: "Globe" },
+    { id: "mercator", label: "Flat" },
   ],
 };
 
@@ -63,6 +72,7 @@ export class SettingsPanel {
     this.popover.append(
       this.segmented(UNIT_CHOICE),
       this.segmented(THEME_CHOICE),
+      this.segmented(PROJECTION_CHOICE),
       this.basemaps(),
       licensesFooter(),
     );

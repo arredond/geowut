@@ -10,28 +10,39 @@ import {
 describe("SettingsStore", () => {
   beforeEach(() => localStorage.clear());
 
-  it("defaults to metric and Auto for the theme and basemap", () => {
+  it("defaults to metric, Auto for the theme and basemap, and a flat map", () => {
     expect(new SettingsStore().get()).toEqual({
       units: "metric",
       theme: "auto",
       basemap: "auto",
       customBasemap: null,
+      projection: "mercator",
     });
   });
 
   it("remembers changes across page loads", () => {
-    new SettingsStore().set({ units: "imperial", basemap: "dark" });
+    new SettingsStore().set({
+      units: "imperial",
+      basemap: "dark",
+      projection: "globe",
+    });
     expect(new SettingsStore().get()).toEqual({
       ...DEFAULT_SETTINGS,
       units: "imperial",
       basemap: "dark",
+      projection: "globe",
     });
   });
 
   it("drops saved values that are no longer valid", () => {
     localStorage.setItem(
       "geowut:settings",
-      JSON.stringify({ units: "furlongs", theme: "dark", basemap: "voyager" }),
+      JSON.stringify({
+        units: "furlongs",
+        theme: "dark",
+        basemap: "voyager",
+        projection: "dymaxion",
+      }),
     );
     expect(new SettingsStore().get()).toEqual({
       ...DEFAULT_SETTINGS,

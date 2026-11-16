@@ -1,6 +1,8 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
-import { basemapStyle, createMap, setBasemap } from "./map";
+import { basemapStyle, createMap, setBasemap, setProjection } from "./map";
+import { Starfield } from "./starfield";
+import { nearestOnLine } from "./renderedLine";
 import {
   GridLayer,
   GRID_DEFINITIONS,
@@ -8,6 +10,7 @@ import {
   cellDetails,
 } from "./grids";
 import { GridControl } from "./gridControl";
+import { Graticule } from "./grids/graticule";
 import {
   DrawController,
   featureDetails,
@@ -60,13 +63,19 @@ const { map, scale } = createMap(
     basemap: shownBasemap,
     customBasemap: settings.get().customBasemap,
   }),
+  { dark: isDarkBasemap(shownBasemap), projection: settings.get().projection },
   settings.get().units,
 );
 
+const starfield = new Starfield(map);
+starfield.setEnabled(settings.get().projection === "globe");
+
 const gridLayers = GRID_DEFINITIONS.map((def) => new GridLayer(map, def));
+const graticule = new Graticule(map);
 const matchBasemap = (basemap: ShownBasemap) => {
-  for (const layer of gridLayers)
-    layer.setLabelHalo(isDarkBasemap(basemap) ? "#1a1d21" : "#ffffff");
+  const halo = isDarkBasemap(basemap) ? "#1a1d21" : "#ffffff";
+  for (const layer of gridLayers) layer.setLabelHalo(halo);
+  graticule.setLabelHalo(halo);
 };
 matchBasemap(shownBasemap);
 
@@ -78,6 +87,7 @@ function showBasemap(force = false): void {
   setBasemap(
     map,
     basemapStyle({ basemap, customBasemap: settings.get().customBasemap }),
+    { dark: isDarkBasemap(basemap), projection: settings.get().projection },
   );
   matchBasemap(basemap);
 }
@@ -130,36 +140,9 @@ function popupAnchor(
     return [lng, lat];
   }
   if (geometry.type !== "LineString") return event.lngLat;
-
-  // Nearest on screen, as the click's buffer is measured.
-  const click = event.point;
-  const vertices = geometry.coordinates.map(([lng, lat]) =>
-    map.project([lng, lat]),
-  );
-  let nearest = vertices[0];
-  let nearestDistance = Infinity;
-  for (let i = 1; i < vertices.length; i++) {
-    const a = vertices[i - 1];
-    const ab = vertices[i].sub(a);
-    const lengthSq = ab.x * ab.x + ab.y * ab.y;
-    const t =
-      lengthSq === 0
-        ? 0
-        : Math.max(
-            0,
-            Math.min(
-              1,
-              ((click.x - a.x) * ab.x + (click.y - a.y) * ab.y) / lengthSq,
-            ),
-          );
-    const candidate = a.add(ab.mult(t));
-    const distance = candidate.dist(click);
-    if (distance < nearestDistance) {
-      nearestDistance = distance;
-      nearest = candidate;
-    }
-  }
-  return map.unproject(nearest);
+  // Nearest on screen, along the line as drawn: on the globe, its segments bend.
+  const nearest = nearestOnLine(map, geometry.coordinates, event.point);
+  return nearest ? map.unproject(nearest.point) : event.lngLat;
 }
 
 const gridInfo = new GridInfoModal(app, gridLayers, units);
@@ -278,8 +261,12 @@ const toolbar = new Toolbar(
   units(),
 );
 
-settings.subscribe(({ units, theme }, changed) => {
+settings.subscribe(({ units, theme, projection }, changed) => {
   if (changed.includes("theme")) applyTheme(theme);
+  if (changed.includes("projection")) {
+    setProjection(map, { dark: isDarkBasemap(shownBasemap), projection });
+    starfield.setEnabled(projection === "globe");
+  }
   showBasemap(shownBasemap === "custom" && changed.includes("customBasemap"));
   if (changed.includes("units")) {
     scale.setUnit(units);
@@ -343,12 +330,18 @@ document.addEventListener("keydown", (e) => {
 
 map.on("load", () => {
   for (const layer of gridLayers) layer.addToMap();
+  graticule.addToMap();
   coveragePreview.addToMap();
   extrusion.addToMap();
   // Over Terra Draw's points, which it has added on this same load.
   addEmojiLayer(map);
 
-  const gridControl = new GridControl(app, gridLayers, () => gridInfo.show());
+  const gridControl = new GridControl(
+    app,
+    gridLayers,
+    () => gridInfo.show(),
+    graticule,
+  );
   gridControl.setZoom(map.getZoom());
   // Phones start with the card folded, to leave the map room.
   if (matchMedia("(max-width: 720px)").matches) gridControl.setCollapsed(true);
@@ -416,6 +409,7 @@ map.on("moveend", () => {
   for (const layer of gridLayers) {
     if (layer.visible) layer.refresh();
   }
+  graticule.refresh();
 });
 
 map.on("zoomend", () => {

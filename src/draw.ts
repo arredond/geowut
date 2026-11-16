@@ -22,6 +22,7 @@ import type {
   Position,
 } from "geojson";
 import { circleCenter, measureGeometry, zRange } from "./geometry";
+import { nearestOnLine } from "./renderedLine";
 import { Measurer, MEASURE_TOOLS } from "./measure";
 import type { Measurement, MeasureTool } from "./measure";
 import type { DetailRow } from "./panel";
@@ -110,6 +111,7 @@ const EDIT_FLAGS = {
 export class DrawController {
   state: DrawState = "select";
   private terraDraw: TerraDraw;
+  private map: MapLibreMap;
   private measurer: Measurer;
   private callbacks: DrawCallbacks;
   private editedId?: FeatureId;
@@ -125,6 +127,7 @@ export class DrawController {
 
   constructor(map: MapLibreMap, callbacks: DrawCallbacks) {
     this.callbacks = callbacks;
+    this.map = map;
     this.terraDraw = new TerraDraw({
       adapter: new TerraDrawMapLibreGLAdapter({ map }),
       undoRedo: { sessionLevel: this.session },
@@ -395,6 +398,35 @@ export class DrawController {
     if (feature) this.callbacks.onFeatureChanged(feature);
   }
 
+  /**
+   * The feature under a click: a point, then the nearest line, then a polygon clicked inside.
+   * Terra Draw finds points and polygons. Lines it measures as straight on screen, which on the
+   * globe they aren't, so those are measured along the line as the map draws it.
+   */
+  private featureAt(e: MapMouseEvent): GeoJSONStoreFeatures | undefined {
+    const found = this.terraDraw.getFeaturesAtLngLat(e.lngLat, {
+      ignoreCoordinatePoints: true,
+    });
+    const point = found.find((f) => f.geometry.type === "Point");
+    if (point) return point;
+
+    let line: GeoJSONStoreFeatures | undefined;
+    let lineDistance = LINE_REACH_PX;
+    for (const feature of this.terraDraw.getSnapshot()) {
+      if (feature.geometry.type !== "LineString") continue;
+      const nearest = nearestOnLine(
+        this.map,
+        feature.geometry.coordinates,
+        e.point,
+      );
+      if (nearest && nearest.distance < lineDistance) {
+        line = feature;
+        lineDistance = nearest.distance;
+      }
+    }
+    return line ?? found.find((f) => f.geometry.type === "Polygon");
+  }
+
   private onClick(e: MapMouseEvent): void {
     if (
       this.finishingClick ||
@@ -418,9 +450,7 @@ export class DrawController {
       this.setState("select");
     }
 
-    const [feature] = this.terraDraw.getFeaturesAtLngLat(e.lngLat, {
-      ignoreCoordinatePoints: true,
-    });
+    const feature = this.featureAt(e);
     if (this.state === "delete") {
       if (feature) this.delete(feature.id!);
     } else {
@@ -428,6 +458,9 @@ export class DrawController {
     }
   }
 }
+
+/** How near a click must be to a line to pick it, in pixels: Terra Draw's own reach. */
+const LINE_REACH_PX = 30;
 
 /** Terra Draw rejects coordinates finer than this, or with an altitude. */
 const COORDINATE_PRECISION = 1e9;

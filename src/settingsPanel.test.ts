@@ -43,6 +43,14 @@ describe("SettingsPanel", () => {
     expect(radio("units", "metric").checked).toBe(true);
     expect(radio("theme", "auto").checked).toBe(true);
     expect(radio("basemap", "auto").checked).toBe(true);
+    expect(radio("projection", "mercator").checked).toBe(true);
+  });
+
+  it("switches the projection between flat and the globe", () => {
+    radio("projection", "globe").click();
+    expect(store.get().projection).toBe("globe");
+    radio("projection", "mercator").click();
+    expect(store.get().projection).toBe("mercator");
   });
 
   it("offers Auto and every OpenFreeMap style", () => {

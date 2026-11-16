@@ -25,7 +25,9 @@ function fakeMap(zoom = 12) {
     addSource: vi.fn(),
     addLayer: vi.fn(),
     setLayoutProperty: vi.fn(),
-    getSource: () => ({ setData }),
+    getSource: (id: string) => ({
+      setData: (data: unknown) => setData(data, id),
+    }),
     getCanvas: () => ({ style: {} }),
     on: vi.fn(),
     queryRenderedFeatures: vi.fn(),
@@ -158,6 +160,69 @@ describe("GridLayer", () => {
       ["mouseenter", "grid-xyz-label"],
       ["mouseleave", "grid-xyz-label"],
     ]);
+  });
+});
+
+describe("GridLayer's curve", () => {
+  const curveData = (map: ReturnType<typeof fakeMap>) =>
+    map.setData.mock.calls.filter(([, id]) => id === "grid-s2-curve");
+  const curveVisibility = (map: ReturnType<typeof fakeMap>) =>
+    map.setLayoutProperty.mock.calls
+      .filter(([id]) => id === "grid-s2-curve-line")
+      .at(-1)?.[2];
+
+  it("draws a line through the cells in curve order, only with the grid on", () => {
+    const map = fakeMap();
+    const layer = new GridLayer(asMap(map), definition("s2"));
+    layer.setCurve(true);
+    expect(curveData(map)).toHaveLength(0);
+
+    layer.setVisible(true);
+    expect(curveVisibility(map)).toBe("visible");
+    const lines = curveData(map).at(-1)![0].features;
+    expect(lines.length).toBeGreaterThan(0);
+    const vertices = lines.reduce(
+      (sum: number, line: { geometry: { coordinates: unknown[] } }) =>
+        sum + line.geometry.coordinates.length,
+      0,
+    );
+    expect(vertices).toBeLessThanOrEqual(
+      map.setData.mock.calls.find(([, id]) => id === "grid-s2")![0].features
+        .length,
+    );
+
+    layer.setCurve(false);
+    expect(curveVisibility(map)).toBe("none");
+    expect(curveData(map).at(-1)![0].features).toHaveLength(0);
+  });
+
+  it("hides with the grid, and comes back with it", () => {
+    const map = fakeMap();
+    const layer = new GridLayer(asMap(map), definition("s2"));
+    layer.setVisible(true);
+    layer.setCurve(true);
+    layer.setVisible(false);
+    expect(curveVisibility(map)).toBe("none");
+    expect(curveData(map).at(-1)![0].features).toHaveLength(0);
+    layer.setVisible(true);
+    expect(curveVisibility(map)).toBe("visible");
+    expect(curveData(map).at(-1)![0].features.length).toBeGreaterThan(0);
+  });
+
+  it("leaves grids without one alone", () => {
+    const map = fakeMap();
+    const layer = new GridLayer(asMap(map), definition("h3"));
+    layer.addToMap();
+    layer.setVisible(true);
+    layer.setCurve(true);
+    expect(layer.curve).toBe(false);
+    expect(map.addSource.mock.calls.map(([id]) => id)).toEqual(["grid-h3"]);
+  });
+
+  it("is offered by the grids whose IDs follow one", () => {
+    expect(
+      GRID_DEFINITIONS.filter((def) => def.curve).map((def) => def.id),
+    ).toEqual(["xyz", "s2", "a5"]);
   });
 });
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GridControl } from "./gridControl";
 import type { GridLayer } from "./grids";
+import type { Graticule } from "./grids/graticule";
 
 function fakeLayer(id: string): GridLayer {
   const layer = {
@@ -188,5 +189,87 @@ describe("GridControl", () => {
     layers[0].onTooManyCellsChange!(false);
     expect(resolution(0).classList.contains("too-many-cells")).toBe(false);
     expect(resolution(0).title).toBe("");
+  });
+});
+
+describe("GridControl's curve buttons", () => {
+  const button = () =>
+    document.querySelector<HTMLButtonElement>("button.grid-curve-button")!;
+
+  beforeEach(() => {
+    document.body.replaceChildren();
+    const s2 = fakeLayer("s2");
+    Object.assign(s2.def, {
+      curve: { name: "its curve", index: () => 0n, center: () => [0, 0] },
+    });
+    Object.assign(s2, {
+      curve: false,
+      setCurve: vi.fn((on: boolean) => {
+        s2.curve = on;
+      }),
+    });
+    new GridControl(document.body, [fakeLayer("h3"), s2]);
+  });
+
+  it("go only on grids with a curve, a blank keeping the rest in line", () => {
+    const [h3Row, s2Row] = document.querySelectorAll(".grid-row");
+    expect(h3Row.querySelector("button.grid-curve-button")).toBeNull();
+    expect(h3Row.querySelector(".grid-curve-button")).not.toBeNull();
+    expect(s2Row.querySelector("button.grid-curve-button")).toBe(button());
+  });
+
+  it("toggle the curve, saying whether it's on", () => {
+    expect(button().getAttribute("aria-pressed")).toBe("false");
+    button().click();
+    expect(button().getAttribute("aria-pressed")).toBe("true");
+    expect(button().classList.contains("active")).toBe(true);
+    button().click();
+    expect(button().getAttribute("aria-pressed")).toBe("false");
+  });
+});
+
+describe("GridControl's graticule", () => {
+  const graticule = {
+    step: 10,
+    setVisible: vi.fn(),
+  } as unknown as Graticule;
+
+  beforeEach(() => {
+    document.body.replaceChildren();
+    new GridControl(document.body, [fakeLayer("h3")], () => {}, graticule);
+  });
+
+  const row = () => document.querySelector<HTMLElement>(".graticule-row")!;
+
+  it("sits below the grids, past a divider", () => {
+    const children = [...document.querySelector(".grid-rows")!.children];
+    expect(children.map((child) => child.className)).toEqual([
+      "grid-row",
+      "grid-divider",
+      "grid-row graticule-row",
+    ]);
+  });
+
+  it("toggles the lines with its switch", () => {
+    const toggle = row().querySelector<HTMLInputElement>("input")!;
+    expect(toggle.getAttribute("role")).toBe("switch");
+    toggle.click();
+    expect(graticule.setVisible).toHaveBeenLastCalledWith(true);
+    toggle.click();
+    expect(graticule.setVisible).toHaveBeenLastCalledWith(false);
+  });
+
+  it("shows the spacing in place of a level, following the zoom", () => {
+    expect(row().querySelector(".grid-row-auto, .grid-stepper")).toBeNull();
+    const spacing = row().querySelector(".graticule-step")!;
+    expect(spacing.textContent).toBe("every 10°");
+    graticule.onStepChange!(0.5);
+    expect(spacing.textContent).toBe("every 0.5°");
+  });
+
+  it("is left out when there's none", () => {
+    document.body.replaceChildren();
+    new GridControl(document.body, [fakeLayer("h3")]);
+    expect(document.querySelector(".grid-divider, .graticule-row")).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import type { StyleSpecification } from "maplibre-gl";
+import { GALAXY_ATTRIBUTION, SPACE_BACKGROUND } from "./starfield";
 import {
   basemapStyle,
   compassAction,
@@ -9,6 +10,11 @@ import {
   BUILDINGS_3D_ID,
   getPaddedViewportBbox,
   withBuildings3d,
+  SKIES,
+  backdrop,
+  credits,
+  skyBackground,
+  withSky,
   withOverlays,
 } from "./map";
 
@@ -267,5 +273,61 @@ describe("withBuildings3d", () => {
   it("does nothing more the second time", () => {
     const once = withBuildings3d(style([flat("building", "#eee")]));
     expect(withBuildings3d(once)).toEqual(once);
+  });
+});
+
+describe("withSky", () => {
+  const base = { version: 8, sources: {}, layers: [] } as StyleSpecification;
+  const light = { dark: false, projection: "globe" } as const;
+
+  it("puts any style in the chosen projection", () => {
+    expect(withSky(base, light).projection).toEqual({ type: "globe" });
+    expect(
+      withSky(
+        { ...base, projection: { type: "globe" } },
+        { ...light, projection: "mercator" },
+      ).projection,
+    ).toEqual({ type: "mercator" });
+  });
+
+  it("gives it the sky that suits the basemap, in place of its own", () => {
+    const own = { ...base, sky: { "sky-color": "#ff0000" } };
+    expect(withSky(own, light).sky).toMatchObject(SKIES.light);
+    expect(withSky(own, { ...light, dark: true }).sky).toMatchObject(
+      SKIES.dark,
+    );
+    expect(withSky(base, light).sky).toHaveProperty("atmosphere-blend");
+  });
+});
+
+describe("skyBackground", () => {
+  it("fades from the horizon to the sky of the basemap's kind", () => {
+    for (const dark of [false, true]) {
+      const sky = SKIES[dark ? "dark" : "light"];
+      const background = skyBackground(dark);
+      expect(background).toContain(String(sky["horizon-color"]));
+      expect(background).toContain(String(sky["sky-color"]));
+    }
+  });
+});
+
+describe("backdrop", () => {
+  it("is space round the globe, whatever the theme, and sky round the flat map", () => {
+    for (const dark of [false, true]) {
+      expect(backdrop({ dark, projection: "globe" })).toBe(SPACE_BACKGROUND);
+      expect(backdrop({ dark, projection: "mercator" })).toBe(
+        skyBackground(dark),
+      );
+    }
+  });
+});
+
+describe("credits", () => {
+  it("credit the Milky Way only on the globe, where it shows", () => {
+    expect(credits("globe")).toContain(GALAXY_ATTRIBUTION);
+    expect(credits("mercator")).not.toContain(GALAXY_ATTRIBUTION);
+    expect(credits("mercator")).toEqual(
+      credits("globe").filter((credit) => credit !== GALAXY_ATTRIBUTION),
+    );
   });
 });

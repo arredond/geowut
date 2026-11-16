@@ -1,5 +1,6 @@
 import { bboxAreaKm2 } from "../geometry";
 import type { Polygon, Position } from "geojson";
+import { hilbertIndex } from "./curve";
 import type { Bbox, CellStats, GridCellFeature } from "./types";
 
 export const MIN_ZOOM = 0;
@@ -140,6 +141,18 @@ export function childCells(id: string): string[] {
         tileId(2 * x + (digit & 1), 2 * y + (digit >> 1), z + 1),
       )
     : [];
+}
+
+/** A tile's middle, halfway across it in Web Mercator as it's drawn. */
+export function tileCenter(id: string): Position {
+  const { z, x, y } = parseTileId(id);
+  return [tileXToLng(x + 0.5, z), tileYToLat(y + 0.5, z)];
+}
+
+/** A tile's place along the Hilbert curve through its zoom's tiles, as PMTiles orders them. */
+export function tileCurveIndex(id: string): bigint {
+  const { z, x, y } = parseTileId(id);
+  return hilbertIndex(x, y, z);
 }
 
 export function tileIdBounds(id: string): Bbox {

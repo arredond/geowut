@@ -1,5 +1,8 @@
 import { gridIcon } from "./grids";
 import type { GridLayer } from "./grids";
+import { CURVE_SHAPE } from "./grids/curve";
+import { GRATICULE_COLOR, GRATICULE_SHAPE } from "./grids/graticule";
+import type { Graticule } from "./grids/graticule";
 import { ICONS } from "./icons";
 
 export class GridControl {
@@ -17,6 +20,7 @@ export class GridControl {
     container: HTMLElement,
     layers: GridLayer[],
     onInfo: () => void = () => {},
+    graticule?: Graticule,
   ) {
     this.onInfo = onInfo;
     this.root = document.createElement("div");
@@ -29,6 +33,12 @@ export class GridControl {
     this.rows.className = "grid-rows";
     for (const layer of layers) {
       this.rows.appendChild(this.buildRow(layer));
+    }
+    // Set apart from the grids above: it has no cells or levels, only lines that follow the zoom.
+    if (graticule) {
+      const divider = document.createElement("hr");
+      divider.className = "grid-divider";
+      this.rows.append(divider, this.buildGraticuleRow(graticule));
     }
     this.root.appendChild(this.rows);
     this.setCollapsed(false);
@@ -92,6 +102,39 @@ export class GridControl {
       const visible = this.layerToggles.get(layer)!.checked;
       if (visible !== layer.visible) layer.setVisible(visible);
     }
+  }
+
+  private buildGraticuleRow(graticule: Graticule): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "grid-row graticule-row";
+    row.style.setProperty("--grid-color", GRATICULE_COLOR);
+
+    const toggle = switchInput("Show latitude and longitude lines");
+    toggle.addEventListener("change", () =>
+      graticule.setVisible(toggle.checked),
+    );
+
+    const swatch = document.createElement("span");
+    swatch.className = "grid-swatch";
+    swatch.innerHTML = gridIcon({ shape: GRATICULE_SHAPE });
+
+    const name = document.createElement("label");
+    name.className = "grid-row-label";
+    name.title = "The graticule: lines of latitude and longitude";
+    name.append(toggle, swatch, "Lat/long");
+
+    // In place of a level: how far apart the lines are, which the zoom sets.
+    const spacing = document.createElement("span");
+    spacing.className = "graticule-step";
+    const showStep = (step: number) => {
+      spacing.textContent = `every ${step}°`;
+      spacing.title = `Lines every ${step}°, spaced to suit the zoom`;
+    };
+    showStep(graticule.step);
+    graticule.onStepChange = showStep;
+
+    row.append(name, spacing);
+    return row;
   }
 
   private buildRow(layer: GridLayer): HTMLElement {
@@ -183,9 +226,39 @@ export class GridControl {
     level.className = "grid-row-level";
     level.append(autoLabel, stepper);
 
-    row.append(name, level);
+    row.append(name, curveButton(layer), level);
     return row;
   }
+}
+
+/**
+ * A quiet toggle for the grid's space-filling curve, kept off the map until asked for. Grids
+ * without one get a blank of the same size, so the rows' controls still line up.
+ */
+function curveButton(layer: GridLayer): HTMLElement {
+  const { curve, label } = layer.def;
+  if (!curve) {
+    const blank = document.createElement("span");
+    blank.className = "grid-curve-button";
+    blank.setAttribute("aria-hidden", "true");
+    return blank;
+  }
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "icon-button grid-curve-button";
+  button.innerHTML = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">${CURVE_SHAPE}</svg>`;
+  button.title = `Show ${curve.name}, through the cells in ID order`;
+  button.setAttribute("aria-label", `Show the ${label} curve`);
+  const show = (on: boolean) => {
+    button.setAttribute("aria-pressed", String(on));
+    button.classList.toggle("active", on);
+  };
+  show(layer.curve);
+  button.addEventListener("click", () => {
+    layer.setCurve(!layer.curve);
+    show(layer.curve);
+  });
+  return button;
 }
 
 /** A checkbox drawn as a switch, and announced as one. */

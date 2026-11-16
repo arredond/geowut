@@ -340,6 +340,38 @@ body,
   background: var(--hover);
 }
 
+/* The space-filling curve's toggle: small and quiet until on, then in the grid's color */
+.grid-curve-button {
+  flex: none;
+  width: 22px;
+  height: 22px;
+}
+
+.grid-curve-button.active {
+  color: var(--grid-color);
+  background: var(--pressed);
+}
+
+.grid-curve-button.active:hover {
+  color: var(--grid-color);
+}
+
+/* Between the nested grids and the graticule, which works differently */
+.grid-divider {
+  margin: 4px 6px;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+/* The graticule's spacing, where the grids have their level: read-only, set by the zoom */
+.graticule-step {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 /* Switches: checkboxes drawn as toggles */
 .switch {
   position: relative;

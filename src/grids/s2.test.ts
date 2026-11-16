@@ -109,3 +109,42 @@ describe("parentCell and childCells", async () => {
     expect(childCells(level24)).toEqual([]);
   });
 });
+
+describe("cellPolygon on large cells", () => {
+  const ring = (token: string) => cellPolygon(token).coordinates[0];
+  const steps = (r: number[][]) =>
+    r.slice(1).map(([lng, lat], i) => [lng - r[i][0], lat - r[i][1]]);
+
+  it("follows the edges' great circles in short steps, without jumping at the antimeridian", () => {
+    // Across the antimeridian at levels 1 and 2 (6c, a9, 57), and two away from it.
+    for (const token of ["6c", "a9", "57", "1c", "3c"]) {
+      const r = ring(token);
+      expect(r.length).toBeGreaterThan(40);
+      expect(r[0]).toEqual(r.at(-1));
+      for (const [dLng, dLat] of steps(r)) {
+        expect(Math.abs(dLng)).toBeLessThan(10);
+        expect(Math.abs(dLat)).toBeLessThan(2);
+      }
+    }
+  });
+
+  it("closes a cell around a pole over the pole", () => {
+    // Face 5 holds the south pole; face 2 the north.
+    for (const [token, pole] of [
+      ["b", -90],
+      ["5", 90],
+    ] as const) {
+      const r = ring(token);
+      expect(r.filter(([, lat]) => lat === pole)).toHaveLength(2);
+      const lngs = r.map(([lng]) => lng);
+      expect(Math.max(...lngs) - Math.min(...lngs)).toBeGreaterThan(355);
+    }
+  });
+
+  it("meets a corner on a pole along the meridians either side", () => {
+    const r = ring("af");
+    const atPole = r.filter(([, lat]) => Math.abs(lat) > 89.9);
+    expect(atPole).toHaveLength(2);
+    for (const [dLng] of steps(r)) expect(Math.abs(dLng)).toBeLessThan(180);
+  });
+});

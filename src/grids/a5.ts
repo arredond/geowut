@@ -80,6 +80,20 @@ export function childCells(id: string): string[] {
     : [];
 }
 
+/** The cell's middle, as A5 places it. */
+export function cellCenter(id: string): Position {
+  return a5.cellToLonLat(toBigint(id));
+}
+
+/**
+ * The cell's place along A5's space-filling curve. IDs lead with it, two bits per resolution
+ * past the first (resolutions 0 and 1 step through the dodecahedron's faces and their segments).
+ */
+export function cellCurveIndex(id: string): bigint {
+  const cell = toBigint(id);
+  return cell >> BigInt(60 - 2 * Math.max(1, a5.getResolution(cell)));
+}
+
 export function estimateCells(bbox: Bbox, resolution: number): number {
   return bboxAreaKm2(bbox) / levelStats(resolution).areaKm2;
 }

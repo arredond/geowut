@@ -1,5 +1,5 @@
 import type { Map as MapLibreMap, GeoJSONSource, PointLike } from "maplibre-gl";
-import type { Feature, FeatureCollection, Polygon } from "geojson";
+import type { Feature, FeatureCollection, Polygon, Position } from "geojson";
 import type { DetailRow } from "../panel";
 import type { Bbox, CellStats, GridCellFeature } from "./types";
 import { getPaddedViewportBbox } from "../map";
@@ -7,6 +7,7 @@ import * as a5Grid from "./a5";
 import * as h3Grid from "./h3";
 import * as xyzGrid from "./xyz";
 import * as s2Grid from "./s2";
+import { curveLines } from "./curve";
 import { formatArea, formatLength } from "../units";
 import type { Units } from "../units";
 
@@ -45,6 +46,14 @@ interface GridDefinition {
   cellInteger?: (id: string) => bigint;
   /** What the ID is called in the details, where plain "ID" won't do, as XYZ's has rivals. */
   idLabel?: string;
+  /** How the grid orders its cells along a space-filling curve, for grids whose IDs follow one. */
+  curve?: {
+    /** What the curve is, for the button that shows it. */
+    name: string;
+    /** Consecutive cells along the curve are exactly 1 apart. */
+    index: (id: string) => bigint;
+    center: (id: string) => Position;
+  };
   /** The same cell named in other schemes, as XYZ tiles are by TMS and quadkeys. */
   otherIds?: (id: string) => { label: string; value: string }[];
 }
@@ -108,6 +117,11 @@ export const GRID_DEFINITIONS: GridDefinition[] = [
     parentCell: xyzGrid.parentCell,
     childCells: xyzGrid.childCells,
     idLabel: "Google (Z/X/Y)",
+    curve: {
+      name: "the Hilbert curve PMTiles stores tiles along",
+      index: xyzGrid.tileCurveIndex,
+      center: xyzGrid.tileCenter,
+    },
     otherIds: (id) => {
       const quadkey = xyzGrid.tileQuadkey(id);
       return [
@@ -142,6 +156,11 @@ export const GRID_DEFINITIONS: GridDefinition[] = [
     parentCell: s2Grid.parentCell,
     childCells: s2Grid.childCells,
     cellInteger: s2Grid.cellInteger,
+    curve: {
+      name: "the Hilbert curve its cell IDs follow",
+      index: s2Grid.cellCurveIndex,
+      center: s2Grid.cellCenter,
+    },
   },
   {
     id: "a5",
@@ -167,6 +186,11 @@ export const GRID_DEFINITIONS: GridDefinition[] = [
     parentCell: a5Grid.parentCell,
     childCells: a5Grid.childCells,
     cellInteger: a5Grid.cellInteger,
+    curve: {
+      name: "the space-filling curve its cell IDs follow",
+      index: a5Grid.cellCurveIndex,
+      center: a5Grid.cellCenter,
+    },
   },
 ];
 
@@ -285,6 +309,11 @@ export class GridLayer {
   private fillLayerId: string;
   private lineLayerId: string;
   readonly labelLayerId: string;
+  private curveSourceId: string;
+  private curveLayerId: string;
+  /** Whether the grid's space-filling curve is drawn through its cells, while the grid is on. */
+  curve = false;
+  private curveDrawn = false;
   private cells = new Map<string, GridCellFeature>();
   visible = false;
   auto = true;
@@ -301,6 +330,8 @@ export class GridLayer {
     this.fillLayerId = `${this.sourceId}-fill`;
     this.lineLayerId = `${this.sourceId}-line`;
     this.labelLayerId = `${this.sourceId}-label`;
+    this.curveSourceId = `${this.sourceId}-curve`;
+    this.curveLayerId = `${this.curveSourceId}-line`;
     this.resolution = def.resolutionForZoom(map.getZoom());
   }
 
@@ -325,6 +356,31 @@ export class GridLayer {
       layout: { visibility: "none" },
       paint: { "line-color": this.def.color, "line-width": 1.5 },
     });
+
+    // Under the labels, so IDs stay legible over it.
+    if (this.def.curve) {
+      this.map.addSource(this.curveSourceId, {
+        type: "geojson",
+        data: EMPTY_COLLECTION,
+      });
+      this.map.addLayer({
+        id: this.curveLayerId,
+        type: "line",
+        source: this.curveSourceId,
+        layout: {
+          visibility: "none",
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        // Dotted, where cell edges are solid: round caps on zero-length dashes make the dots.
+        paint: {
+          "line-color": this.def.color,
+          "line-width": 2.5,
+          "line-opacity": 0.85,
+          "line-dasharray": [0, 2],
+        },
+      });
+    }
 
     this.map.addLayer({
       id: this.labelLayerId,
@@ -370,8 +426,47 @@ export class GridLayer {
     for (const id of [this.fillLayerId, this.lineLayerId, this.labelLayerId]) {
       this.map.setLayoutProperty(id, "visibility", layout);
     }
+    this.showCurve();
     if (visible) this.refresh();
     else this.clear();
+  }
+
+  /** Draw the grid's space-filling curve through its cells, or stop; it shows while the grid is on. */
+  setCurve(curve: boolean): void {
+    if (!this.def.curve) return;
+    this.curve = curve;
+    this.showCurve();
+    this.drawCurve();
+  }
+
+  private showCurve(): void {
+    if (!this.def.curve) return;
+    this.map.setLayoutProperty(
+      this.curveLayerId,
+      "visibility",
+      this.visible && this.curve ? "visible" : "none",
+    );
+  }
+
+  private drawCurve(): void {
+    const { curve } = this.def;
+    if (!curve) return;
+    const shown = this.visible && this.curve;
+    // Nothing to clear when it was never drawn, as with most grids, most of the time.
+    if (!shown && !this.curveDrawn) return;
+    this.curveDrawn = shown;
+    const source = this.map.getSource(this.curveSourceId) as
+      GeoJSONSource | undefined;
+    source?.setData(
+      shown
+        ? curveLines(
+            [...this.cells.keys()].map((id) => ({
+              index: curve.index(id),
+              center: curve.center(id),
+            })),
+          )
+        : EMPTY_COLLECTION,
+    );
   }
 
   /** Others that follow the resolution, beyond the grid control's own field: told only when it actually changes. */
@@ -423,6 +518,7 @@ export class GridLayer {
     const source = this.map.getSource(this.sourceId) as
       GeoJSONSource | undefined;
     source?.setData({ type: "FeatureCollection", features });
+    this.drawCurve();
   }
 
   clear(): void {
@@ -431,6 +527,7 @@ export class GridLayer {
     const source = this.map.getSource(this.sourceId) as
       GeoJSONSource | undefined;
     source?.setData(EMPTY_COLLECTION);
+    this.drawCurve();
   }
 }
 

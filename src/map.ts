@@ -1,4 +1,5 @@
 import {
+  AttributionControl,
   Map,
   NavigationControl,
   ScaleControl,
@@ -8,19 +9,34 @@ import type {
   ExpressionSpecification,
   FillLayerSpecification,
   FilterSpecification,
+  SkySpecification,
   StyleSpecification,
 } from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { rasterStyle } from "./customBasemap";
+import { GALAXY_ATTRIBUTION, SPACE_BACKGROUND } from "./starfield";
 import type { Bbox } from "./grids/types";
 import { basemapStyleUrl } from "./settings";
-import type { Settings, ShownBasemap } from "./settings";
+import type { Projection, Settings, ShownBasemap } from "./settings";
 import type { Units } from "./units";
 
 // MapLibre expects its worker next to its own module, which doesn't survive bundling.
 setWorkerUrl(maplibreWorkerUrl);
 
 const MAX_MERCATOR_LAT = 85.05;
+
+/**
+ * As far out as the map goes: on the globe, all of it in view and still big enough to read; flat,
+ * the whole world in one tile, as Web Mercator has it at zoom 0.
+ */
+export const MIN_ZOOM: Record<Projection, number> = { globe: 2, mercator: 0 };
+
+/** What the map's style is fitted to beyond the basemap itself. */
+export interface MapLook {
+  /** Whether the basemap is dark, for a sky to match. */
+  dark: boolean;
+  projection: Projection;
+}
 
 /** Sources and layers of our own (grids, Terra Draw's 'td' and 'td-measure', point emoji, polygon extrusion), as opposed to the basemap's. */
 const OVERLAY_PREFIXES = ["grid-", "td-", "gw-", "z-"];
@@ -45,6 +61,7 @@ export function basemapStyle({
 export function createMap(
   container: string | HTMLElement,
   style: string | StyleSpecification,
+  look: MapLook,
   units: Units,
 ): { map: Map; scale: ScaleControl } {
   // OpenFreeMap's tiles carry their own attribution.
@@ -52,18 +69,18 @@ export function createMap(
     container,
     center: [-3, 40],
     zoom: 8,
-    // MapLibre's defaults (collapsible, crediting MapLibre) plus place search, which is
-    // OpenStreetMap data too and must say so even over a custom basemap.
-    attributionControl: {
-      compact: true,
-      customAttribution: [
-        '<a href="https://maplibre.org/" target="_blank">MapLibre</a>',
-        'Search by <a href="https://photon.komoot.io/" target="_blank" rel="noopener">Photon</a> and <a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
-      ],
-    },
+    minZoom: MIN_ZOOM[look.projection],
+    attributionControl: false,
   });
+  // MapLibre's defaults (collapsible, crediting MapLibre), with credits that follow the projection.
+  const attribution = new AttributionControl({
+    compact: true,
+    customAttribution: credits(look.projection),
+  });
+  attributions.set(map, attribution);
+  map.addControl(attribution);
   // Through setBasemap, so the first style is transformed (3D buildings) as later ones are.
-  setBasemap(map, style);
+  setBasemap(map, style, look);
   startAttributionCollapsed(map);
   const scale = new ScaleControl({ unit: units });
 
@@ -75,6 +92,21 @@ export function createMap(
 
   return { map, scale };
 }
+
+/**
+ * Credits of our own beside the basemap's: MapLibre, and place search, which is OpenStreetMap
+ * data too and must say so even over a custom basemap. The globe adds the Milky Way behind it.
+ */
+export function credits(projection: Projection): string[] {
+  return [
+    '<a href="https://maplibre.org/" target="_blank">MapLibre</a>',
+    'Search by <a href="https://photon.komoot.io/" target="_blank" rel="noopener">Photon</a> and <a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+    ...(projection === "globe" ? [GALAXY_ATTRIBUTION] : []),
+  ];
+}
+
+/** Each map's attribution control, for its credits to change with the projection. */
+const attributions = new WeakMap<Map, AttributionControl>();
 
 /** How far a click on the compass tilts the map, in degrees: enough to see extruded polygons stand. */
 export const COMPASS_TILT = 50;
@@ -174,11 +206,87 @@ function startAttributionCollapsed(map: Map): void {
 }
 
 /** Swap the basemap underneath, keeping our sources and layers, with their data, on top as they were. */
-export function setBasemap(map: Map, style: string | StyleSpecification): void {
+export function setBasemap(
+  map: Map,
+  style: string | StyleSpecification,
+  look: MapLook,
+): void {
   map.setStyle(style, {
     transformStyle: (previous, next) =>
-      withOverlays(previous, withBuildings3d(next)),
+      withOverlays(previous, withSky(withBuildings3d(next), look)),
   });
+  map.getContainer().style.background = backdrop(look);
+}
+
+/** Switch between the globe and flat Web Mercator, and how far out each lets you zoom. */
+export function setProjection(map: Map, look: MapLook): void {
+  map.setProjection({ type: look.projection });
+  const attribution = attributions.get(map);
+  if (attribution) {
+    attribution.options.customAttribution = credits(look.projection);
+    attribution._updateAttributions();
+  }
+  map.setMinZoom(MIN_ZOOM[look.projection]);
+  map.getContainer().style.background = backdrop(look);
+}
+
+/** What shows around the world zoomed out: space for the starfield round the globe, or sky round the flat map. */
+export function backdrop({ dark, projection }: MapLook): string {
+  return projection === "globe" ? SPACE_BACKGROUND : skyBackground(dark);
+}
+
+/**
+ * What shows around the flat map zoomed out. MapLibre draws its sky only above a tilted horizon
+ * and leaves the rest of the canvas clear, so the space around the world is the container's: the
+ * same sky, lighter towards the middle as the horizon is.
+ */
+export function skyBackground(dark: boolean): string {
+  const sky = SKIES[dark ? "dark" : "light"];
+  return `radial-gradient(circle, ${sky["horizon-color"]} 30%, ${sky["sky-color"]} 75%)`;
+}
+
+/** The sky over a light basemap and a dark one: a day sky, and a night one in the Dark style's tones. */
+export const SKIES: Record<"light" | "dark", SkySpecification> = {
+  light: {
+    "sky-color": "#88c6fc",
+    "horizon-color": "#e8f2fc",
+    "fog-color": "#ffffff",
+  },
+  dark: {
+    "sky-color": "#0b1626",
+    "horizon-color": "#26384f",
+    "fog-color": "#1a1d21",
+  },
+};
+
+/** The atmosphere's glow around the globe, full zoomed out and gone by the time it's flat. */
+const ATMOSPHERE_BLEND: ExpressionSpecification = [
+  "interpolate",
+  ["linear"],
+  ["zoom"],
+  5,
+  1,
+  7,
+  0,
+];
+
+/**
+ * The style in the chosen projection, under a sky that suits the basemap. MapLibre's globe blends
+ * into Web Mercator as you zoom in, so the two differ only zoomed out. Projection and sky belong
+ * to the style, so every basemap is given them, custom ones too, replacing any of their own.
+ */
+export function withSky(
+  style: StyleSpecification,
+  { dark, projection }: MapLook,
+): StyleSpecification {
+  return {
+    ...style,
+    projection: { type: projection },
+    sky: {
+      ...SKIES[dark ? "dark" : "light"],
+      "atmosphere-blend": ATMOSPHERE_BLEND,
+    },
+  };
 }
 
 /**

@@ -4,6 +4,9 @@ import type { Units } from "./units";
 
 export type Theme = "light" | "dark" | "auto";
 
+/** How the map looks zoomed out: a globe, or flat Web Mercator down to the whole world at zoom 0. */
+export type Projection = "globe" | "mercator";
+
 /** OpenFreeMap's styles. Dark ones get dark halos around our labels. */
 export const BASEMAPS = [
   { id: "liberty", label: "Liberty", dark: false },
@@ -43,6 +46,7 @@ export interface Settings {
   theme: Theme;
   basemap: Basemap;
   customBasemap: CustomBasemap | null;
+  projection: Projection;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -50,6 +54,8 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "auto",
   basemap: "auto",
   customBasemap: null,
+  // Flat by default: the globe's starfield brings three.js and a large image, fetched only once picked.
+  projection: "mercator",
 };
 
 const STORAGE_KEY = "geowut:settings";
@@ -85,6 +91,9 @@ function load(): Settings {
         ? (saved.basemap as Basemap)
         : DEFAULT_SETTINGS.basemap,
     customBasemap,
+    projection: isOneOf(saved.projection, ["globe", "mercator"] as const)
+      ? saved.projection
+      : DEFAULT_SETTINGS.projection,
   };
 }
 

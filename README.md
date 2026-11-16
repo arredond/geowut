@@ -31,15 +31,16 @@ to "no, better make it GeoJSON", all the way to "gimme a level 14 tile in Manhat
   - Simply drag and drop onto the map. Files are read in your browser and never uploaded. Currently supported formats include GeoJSON, CSV, GPX, KML/KMZ, GeoPackage, GeoParquet, Shapefile (zipped or individual components) and FlatGeoBuf.
   - Use the "Add data" button to create features from text: GeoJSON, (E)WKT, (E)WKB, GDAL bboxes, lat/long pairs, cell IDs, etc. Anything _geowut_ can export, it can import as well. Pasting directly onto the map works as well.
   - Files or text data in other coordinate systems are reprojected to WGS84.
-- **Grid layers**: visualize the most common geospatial indexes (H3, S2, A5, XYZ tiles) at any zoom level. Clicking on the label shows you all the properties you need, including IDs, parents and children.
+- **Grid layers**: visualize the most common geospatial indexes (H3, S2, A5, XYZ tiles) at any zoom level. Clicking on the label shows you all the properties you need, including IDs, parents and children. For S2, A5 and XYZ, a small curve button shows the space-filling curve their IDs follow (for XYZ, the Hilbert order PMTiles stores tiles in). A lat/long graticule is there too, its spacing following the zoom.
 - **Search**: powered by [Photon](https://photon.komoot.io/) and [Nominatim](https://nominatim.org/). Click the "+" button next to a result to add the feature to the map (simplified to avoid crashing your browser).
-- **Settings**: light/dark/auto mode, basemap picker, etc.
+- **Settings**: light/dark/auto mode, basemap picker, flat or globe projection (with stars, the Milky Way and the sun where it really is), etc.
 
 ## Stack
 
 _geowut_ is a simple frontend-only static app ([Vite](https://vite.dev/) + TypeScript) that relies on _a lot_ of fantastic, open tools such as:
 
 - [MapLibre GL JS](https://maplibre.org/) for rendering.
+- [maplibre-gl-starfield](https://github.com/geoql/maplibre-gl-starfield) and [three.js](https://threejs.org/) for the stars and sky around the globe.
 - [OpenFreeMap](https://openfreemap.org/) for basemap tiles and styles.
 - [Photon](https://photon.komoot.io/), [Nominatim](https://nominatim.org/) and [maplibre-gl-geocoder](https://github.com/maplibre/maplibre-gl-geocoder) for place search. _geowut_ currently uses their public APIs -- be nice!
 - [Terra Draw](https://terradraw.io/) for drawing and editing geometries.
@@ -112,10 +113,13 @@ The maintainers of all the aforementioned sites, plus:
 - [Peter Johnson](https://github.com/missinglink) for [s2js](https://github.com/missinglink/s2js), a pure
   TypeScript port of Google's S2 geometry library.
 - [Felix Palmer](https://github.com/felixpalmer) for [the A5 tiling system](https://a5geo.org/) and its [official TS library](https://github.com/felixpalmer/a5).
+- [GeoQL](https://github.com/geoql) for maplibre-gl-starfield, and the [three.js](https://threejs.org/) authors.
+- [ESO](https://www.eso.org/)/S. Brunier for the [Milky Way panorama](https://www.eso.org/public/images/eso0932a/) behind the globe ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)), resized for the web.
 - Google's [Noto Sans](https://fonts.google.com/noto/specimen/Noto+Sans) ([SIL Open Font License](https://openfontlicense.org/)), the typeface of every label on the map, basemap and grids alike.
 
 ## License
 
 _geowut_ is [MIT licensed](LICENSE). It's built on the open-source packages credited above, under their own
 permissive licenses (MIT, ISC, BSD and Apache-2.0): `npm run build` writes them all, with their full texts, to
-`dist/third-party-licenses.txt`, which the site serves and links from its settings.
+`dist/third-party-licenses.txt`, which the site serves and links from its settings. The Milky Way image in `public/milkyway.jpg` is ESO/S. Brunier's, under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), and credited on the map whenever the globe shows it.
