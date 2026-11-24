@@ -92,6 +92,56 @@ describe("parseFeatures", () => {
     ]);
   });
 
+  it("reads typeset minus signs as negatives, in pairs, bboxes and WKT", () => {
+    expect(parseFeatures("40.937, \u22124.699")[0].geometry).toEqual({
+      type: "Point",
+      coordinates: [-4.699, 40.937],
+    });
+    expect(parseFeatures("\u22123.8 40.3 \u22123.5 40.6")).toHaveLength(1);
+    expect(parseFeatures("POINT (\u22124.699 40.937)")[0].geometry).toEqual({
+      type: "Point",
+      coordinates: [-4.699, 40.937],
+    });
+  });
+
+  it("reads en dashes and other hyphens as negatives", () => {
+    for (const dash of ["\u2010", "\u2011", "\u2012", "\u2013"])
+      expect(parseFeatures(`40.937, ${dash}4.699`)[0].geometry).toEqual({
+        type: "Point",
+        coordinates: [-4.699, 40.937],
+      });
+    expect(
+      parseFeatures("Extent: (-3.8, 40.3) \u2013 (-3.5, 40.6)"),
+    ).toHaveLength(1);
+  });
+
+  it("ignores invisible characters copied from web pages", () => {
+    for (const mark of ["\u200B", "\u200E", "\u200F", "\u202B", "\u2060"])
+      expect(
+        parseFeatures(`${mark}40.937,${mark} -4.699${mark}`)[0].geometry,
+      ).toEqual({
+        type: "Point",
+        coordinates: [-4.699, 40.937],
+      });
+    expect(parseFeatures("\u200Bezs42")).toHaveLength(1);
+  });
+
+  it("reads fullwidth digits and punctuation", () => {
+    expect(
+      parseFeatures(
+        "\uFF14\uFF10\uFF0E\uFF19\uFF13\uFF17\uFF0C\uFF0D\uFF14\uFF0E\uFF16\uFF19\uFF19",
+      )[0].geometry,
+    ).toEqual({ type: "Point", coordinates: [-4.699, 40.937] });
+  });
+
+  it("parses tab-separated lat, lng pairs, as copied from a spreadsheet", () => {
+    expect(parseFeatures("40.937\t-4.699\n40.4168\t-3.7038")).toHaveLength(2);
+  });
+
+  it("still reads a space-separated pair as nothing, being ambiguous", () => {
+    expect(parseFeatures("40.937 -4.699")).toEqual([]);
+  });
+
   it("mixes bounding boxes and points across lines", () => {
     expect(parseFeatures("-3.8 40.3 -3.5 40.6\n40.4, -3.7")).toHaveLength(2);
   });

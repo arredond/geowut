@@ -16,6 +16,14 @@ describe("parseWkt", () => {
     expect(parseWkt(text)).toEqual(geometry);
   });
 
+  it.each([
+    "POINT (\u20134.7 40.9)",
+    "LINESTRING (0 0, 1 x)",
+    "GEOMETRYCOLLECTION (POINT (1 2), POINT (abc 3))",
+  ])("refuses %s, with an ordinate that isn't a number", (text) => {
+    expect(parseWkt(text)).toBeNull();
+  });
+
   it("reprojects other SRIDs", async () => {
     const point = await withProjections(() =>
       parseWkt("SRID=25830;POINT(440000 4474000)"),

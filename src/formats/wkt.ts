@@ -33,7 +33,7 @@ export function parseWkt(text: string): Geometry | null {
       throw error;
     return null;
   }
-  if (!geometry || isEmpty(geometry)) return null;
+  if (!geometry || isEmpty(geometry) || !allFinite(geometry)) return null;
   // betterknown keeps ZM's M as a fourth ordinate; it drops XYM's on its own.
   return mapPositions(geometry, (p) => p.slice(0, 3));
 }
@@ -50,6 +50,12 @@ function wholeGeometry(text: string): boolean {
   }
   return /\bEMPTY\s*$/i.test(text);
 }
+
+/** Whether every ordinate is a number: betterknown reads what isn't one, such as "–4.7", as NaN. */
+const allFinite = (geometry: Geometry): boolean =>
+  geometry.type === "GeometryCollection"
+    ? geometry.geometries.every(allFinite)
+    : [geometry.coordinates].flat(4).every(Number.isFinite);
 
 const isEmpty = (geometry: Geometry): boolean =>
   geometry.type === "GeometryCollection"

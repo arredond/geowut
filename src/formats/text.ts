@@ -22,15 +22,45 @@ export function parseFeatures(text: string): Feature[] {
   if (json !== undefined && typeof json === "object")
     return jsonToFeatures(json);
 
+  // JSON keeps its text as is, as its strings are properties; the rest reads better cleaned up.
+  const plain = plainText(text);
+  const numeric = plain.replace(MINUS_SIGNS, "-");
   return (
     parseJsonLines(text) ??
-    parseWktFeatures(text) ??
-    parseCoordinateLines(text) ??
-    parseCellIds(text) ??
-    parseTokens(text) ??
+    parseWktFeatures(numeric) ??
+    parseCoordinateLines(numeric) ??
+    parseCellIds(plain) ??
+    parseTokens(plain) ??
     []
   );
 }
+
+/**
+ * Characters that don't show but come along when copying from web pages: zero-width spaces and
+ * joiners, the word joiner, and the marks and controls that set the direction of text.
+ */
+const INVISIBLE = /[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g;
+
+/** Fullwidth ASCII, as Chinese, Japanese and Korean keyboards type it: digits, letters, punctuation. */
+const FULLWIDTH = /[\uFF01-\uFF5E]/g;
+
+/**
+ * Text with invisible characters dropped and fullwidth ones made ASCII. Not NFKC, which would also
+ * make the masculine ordinal (º), often typed as a degree sign, an "o".
+ */
+function plainText(text: string): string {
+  return text
+    .replace(INVISIBLE, "")
+    .replace(FULLWIDTH, (char) =>
+      String.fromCharCode(char.charCodeAt(0) - 0xfee0),
+    );
+}
+
+/**
+ * Typeset negatives: the minus sign (U+2212) and its small form, and the hyphens and dashes word
+ * processors swap in for a hyphen-minus (U+2010 to U+2013, the en dash among them).
+ */
+const MINUS_SIGNS = /[\u2010-\u2013\u2212\uFE63]/g;
 
 /** Lines of JSON: GeoJSONSeq (RFC 8142) also leads each record with an ASCII record separator. */
 // oxlint-disable-next-line no-control-regex
@@ -160,8 +190,9 @@ const BBOX_PREFIX = /^(?:-te|-spat|-projwin|extent:)\s*/i;
 const NUMBER = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?$/i;
 
 /**
- * Each line is a bounding box with four numbers, a comma-separated "lat, lng" pair, a point in
- * degrees, minutes and seconds (or with hemisphere letters), or a map link. Bboxes accept GDAL's
+ * Each line is a bounding box with four numbers, a "lat, lng" pair split by a comma or a tab (as
+ * copying two spreadsheet cells gives), a point in degrees, minutes and seconds (or with
+ * hemisphere letters), or a map link. Bboxes accept GDAL's
  * -te/-spat (xmin ymin xmax ymax), -projwin (ulx uly lrx lry) and ogrinfo's
  * "Extent: (xmin, ymin) - (xmax, ymax)", since taking the min and max of each axis makes the
  * corner order irrelevant. Any line that fits none rejects the whole input, with null.
@@ -186,7 +217,7 @@ function parseCoordinateLines(text: string): Feature[] | null {
       const bbox = bboxFeature(numbers);
       if (!bbox) return null;
       features.push(bbox);
-    } else if (numbers.length === 2 && line.includes(",")) {
+    } else if (numbers.length === 2 && /[,\t]/.test(line)) {
       const [lat, lng] = numbers;
       if (!validLngLat(lng, lat)) return null;
       features.push(toFeature({ type: "Point", coordinates: [lng, lat] }));
